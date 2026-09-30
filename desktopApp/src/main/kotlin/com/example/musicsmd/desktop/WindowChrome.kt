@@ -6,7 +6,10 @@ import com.sun.jna.Library
 import com.sun.jna.Native
 import com.sun.jna.Pointer
 import com.sun.jna.ptr.IntByReference
+import java.awt.Component
+import java.awt.Container
 import java.awt.Window
+import javax.swing.RootPaneContainer
 
 /**
  * Paints the native Windows title bar and window border in the app's background colour, so the
@@ -34,8 +37,14 @@ object WindowChrome {
     }
 
     fun apply(window: Window, background: Color, text: Color) {
+        val awtBackground = java.awt.Color(background.toArgb() and 0xFFFFFF)
         // The AWT background shows for a frame while the window is resized; keep it dark too.
-        window.background = java.awt.Color(background.toArgb() and 0xFFFFFF)
+        window.background = awtBackground
+        // A window whose size in pixels isn't a whole number of dp (maximised at 125 % scaling,
+        // say) leaves a pixel row or column that Compose's canvas doesn't reach, and the Swing
+        // panels behind it paint that in their light default colour: a white line along the edge.
+        (window as? RootPaneContainer)?.rootPane?.let { paintSwingBackgrounds(it, awtBackground) }
+        window.repaint()
         val api = dwm ?: return
         val hwnd = runCatching { Native.getWindowPointer(window) }.getOrNull() ?: return
         runCatching {
@@ -50,6 +59,13 @@ object WindowChrome {
 
     private fun Dwmapi.set(hwnd: Pointer, attribute: Int, value: Int): Int =
         DwmSetWindowAttribute(hwnd, attribute, IntByReference(value), 4)
+
+    /** Every Swing container under [component]; Compose's own canvas (skiko) is left alone. */
+    private fun paintSwingBackgrounds(component: Component, color: java.awt.Color) {
+        if (component.javaClass.name.startsWith("org.jetbrains.skiko")) return
+        component.background = color
+        if (component is Container) component.components.forEach { paintSwingBackgrounds(it, color) }
+    }
 
     /** Win32 COLORREF is 0x00BBGGRR. */
     private fun Color.toColorRef(): Int {
