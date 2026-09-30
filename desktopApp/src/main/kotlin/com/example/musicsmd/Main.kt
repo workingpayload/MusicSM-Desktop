@@ -12,10 +12,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import java.awt.GraphicsEnvironment
 import com.example.musicsm.domain.model.Song
 import com.example.musicsmd.home.HomeScreen
 import com.example.musicsmd.library.LibraryScreen
@@ -83,6 +86,9 @@ fun App(viewModel: AppViewModel) {
                                             onToggleLike = viewModel::toggleLike,
                                             onAlbumClick = { viewModel.navigateTo(Screen.AlbumDetail(it.id)) },
                                             onArtistClick = { viewModel.navigateTo(Screen.ArtistDetail(it.id)) },
+                                            onPlaylistClick = { viewModel.navigateTo(Screen.PlaylistDetail(it.id)) },
+                                            onLoadMoreHome = viewModel::loadMoreHome,
+                                            onRetryHome = { viewModel.loadHome() },
                                         )
                                         Screen.Library -> LibraryScreen(
                                             likedSongs = uiState.likedSongs,
@@ -166,7 +172,15 @@ fun main() {
     )
 
     application {
-        val windowState = rememberWindowState()
+        // Fit within the usable desktop area (excludes the taskbar) so the player bar is never hidden.
+        val screen = GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
+        val windowState = rememberWindowState(
+            position = WindowPosition(Alignment.Center),
+            size = DpSize(
+                minOf(1280, (screen.width * 0.9).toInt()).dp,
+                minOf(820, (screen.height * 0.9).toInt()).dp,
+            ),
+        )
         Window(
             onCloseRequest = {
                 viewModel.dispose()

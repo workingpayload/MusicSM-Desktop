@@ -10,12 +10,13 @@ app; only the UI shell and playback engine are desktop-specific.
 Covers the agreed MVP scope plus a fuller UI/feature pass:
 
 - Sidebar navigation (Home / Search / Library) with back-stack.
-- Home feed with album/artist card shelves and song rows.
+- Home feed with album/artist/playlist card shelves and song rows; more shelves load as you scroll.
 - Your Library: liked songs, local playlists (create + add tracks), recent plays — persisted to
   `~/.musicsm-desktop/library.json` (JSON-file store, since Room isn't practical on plain JVM).
 - Album / Artist / Playlist detail screens with track lists and Play-all.
 - Mini player bar (artwork, like, expand, queue toggle) plus a full-screen Now Playing view
   (seek, prev/play-pause/next, like, volume, queue toggle) and a slide-in queue panel.
+  Seek and volume use the mobile app's `AppleSeekBar` (thumbless capsule, flowing hue gradient).
 - Cover art via Coil3 (OkHttp network fetcher).
 - **Glassmorphic UI**, ported from the mobile app's `ui/components/Glass.kt` / `ui/theme/Palette.kt`:
   a byte-identical dark "Stitch" colour palette, a `GlassPanel` frosted-glass component (real

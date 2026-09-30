@@ -44,6 +44,7 @@ data class AppUiState(
     val searchResults: SearchResults = SearchResults(),
     val homeFeed: HomeFeed = HomeFeed(),
     val isLoadingHome: Boolean = true,
+    val isLoadingMoreHome: Boolean = false,
     val likedSongs: List<Song> = emptyList(),
     val playlists: List<Playlist> = emptyList(),
     val albumDetail: Album? = null,
@@ -125,6 +126,29 @@ class AppViewModel(
         runCatching { musicSource.homeFeed() }
             .onSuccess { feed -> _uiState.update { it.copy(homeFeed = feed, isLoadingHome = false) } }
             .onFailure { e -> _uiState.update { it.copy(isLoadingHome = false, error = e.message) } }
+    }
+
+    /** Appends the next page of home shelves; YouTube Music's first page is often only 2 shelves. */
+    fun loadMoreHome() {
+        val state = _uiState.value
+        val continuation = state.homeFeed.continuation ?: return
+        if (state.isLoadingHome || state.isLoadingMoreHome) return
+        _uiState.update { it.copy(isLoadingMoreHome = true) }
+        scope.launch {
+            val more = runCatching { musicSource.moreHomeShelves(continuation) }.getOrNull()
+            _uiState.update { current ->
+                if (more == null) return@update current.copy(isLoadingMoreHome = false)
+                val known = current.homeFeed.sections.map { it.title }.toSet()
+                val added = more.sections.filter { it.title !in known }
+                current.copy(
+                    homeFeed = HomeFeed(
+                        sections = current.homeFeed.sections + added,
+                        continuation = more.continuation.takeIf { added.isNotEmpty() },
+                    ),
+                    isLoadingMoreHome = false,
+                )
+            }
+        }
     }
 
     fun onQueryChange(query: String) {

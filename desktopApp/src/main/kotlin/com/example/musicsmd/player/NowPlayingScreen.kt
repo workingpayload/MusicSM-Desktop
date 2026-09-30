@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -34,10 +33,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.musicsmd.ui.components.AppleSeekBar
 import com.example.musicsmd.ui.components.ArtworkImage
 import com.example.musicsmd.ui.components.GlassPanel
 import com.example.musicsmd.ui.theme.GlassFillStrong
-import java.util.concurrent.TimeUnit
 
 /**
  * Full-screen "Now Playing" — desktop counterpart of the mobile app's expanded player sheet.
@@ -90,16 +89,12 @@ fun NowPlayingScreen(
                 tint = GlassFillStrong,
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Slider(
-                        value = state.positionMs.toFloat(),
-                        valueRange = 0f..(state.durationMs.toFloat().coerceAtLeast(1f)),
-                        onValueChange = { onSeek(it.toLong()) },
-                        modifier = Modifier.fillMaxWidth(),
+                    AppleSeekBar(
+                        progress = if (state.durationMs > 0) state.positionMs.toFloat() / state.durationMs else 0f,
+                        durationMs = state.durationMs,
+                        onSeek = { fraction -> onSeek((fraction * state.durationMs).toLong()) },
+                        playing = state.isPlaying,
                     )
-                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                        Text(formatMs(state.positionMs), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(formatMs(state.durationMs), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -128,22 +123,16 @@ fun NowPlayingScreen(
 
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Filled.VolumeUp, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Slider(
-                            value = state.volume.toFloat(),
-                            valueRange = 0f..100f,
-                            onValueChange = { onVolumeChange(it.toInt()) },
-                            modifier = Modifier.fillMaxWidth().padding(start = 8.dp),
+                        AppleSeekBar(
+                            progress = state.volume / 100f,
+                            durationMs = 0L,
+                            onSeek = { fraction -> onVolumeChange((fraction * 100).toInt()) },
+                            showLabels = false,
+                            modifier = Modifier.padding(start = 8.dp),
                         )
                     }
                 }
             }
         }
     }
-}
-
-internal fun formatMs(ms: Long): String {
-    val totalSeconds = TimeUnit.MILLISECONDS.toSeconds(ms.coerceAtLeast(0))
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return "%d:%02d".format(minutes, seconds)
 }

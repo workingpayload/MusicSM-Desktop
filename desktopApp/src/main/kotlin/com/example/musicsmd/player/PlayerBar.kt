@@ -19,13 +19,13 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.musicsmd.ui.components.AppleSeekBar
 import com.example.musicsmd.ui.components.ArtworkImage
 import com.example.musicsmd.ui.components.GlassPanel
 import com.example.musicsmd.ui.theme.GlassFillStrong
@@ -68,15 +68,13 @@ fun PlayerBar(
                 Controls(state = state, onTogglePlayPause = onTogglePlayPause, onNext = onNext, onPrevious = onPrevious)
                 IconButton(onClick = onToggleQueue) { Icon(Icons.Filled.QueueMusic, contentDescription = "Queue", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
-            Slider(
-                value = state.positionMs.toFloat(),
-                valueRange = 0f..(state.durationMs.toFloat().coerceAtLeast(1f)),
-                onValueChange = { onSeek(it.toLong()) },
+            AppleSeekBar(
+                progress = if (state.durationMs > 0) state.positionMs.toFloat() / state.durationMs else 0f,
+                durationMs = state.durationMs,
+                onSeek = { fraction -> onSeek((fraction * state.durationMs).toLong()) },
+                playing = state.isPlaying,
+                modifier = Modifier.padding(top = 6.dp),
             )
-            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Text(formatMs(state.positionMs), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(formatMs(state.durationMs), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
         }
     }
 }
