@@ -54,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.musicsmd.nav.Screen
+import com.example.musicsmd.support.DietCokeDockButton
 import com.example.musicsmd.ui.components.GlassPanel
 import com.example.musicsmd.ui.theme.GlassFillStrong
 import com.example.musicsmd.ui.theme.LocalMusicSmPalette
@@ -74,6 +75,7 @@ fun SideDock(
     current: Screen,
     onSelect: (Screen) -> Unit,
     modifier: Modifier = Modifier,
+    onSupport: (() -> Unit)? = null,
 ) {
     val items = remember {
         listOf(
@@ -152,6 +154,10 @@ fun SideDock(
                     onClick = { onSelect(item.screen) },
                     modifier = Modifier.height(ITEM_HEIGHT),
                 )
+            }
+            // Below the tabs, so the puck (drawn by index from the top) never lands on it.
+            if (onSupport != null) {
+                DietCokeDockButton(onClick = onSupport, modifier = Modifier.height(ITEM_HEIGHT))
             }
         }
     }

@@ -89,6 +89,7 @@ import com.example.musicsmd.player.SongActions
 import com.example.musicsmd.search.SearchScreen
 import com.example.musicsmd.settings.SettingsScreen
 import com.example.musicsmd.share.PlaylistShareDialog
+import com.example.musicsmd.support.DietCokeDialog
 import com.example.musicsmd.share.SharedPlaylistScreen
 import com.example.musicsmd.share.copyTextToClipboard
 import com.example.musicsmd.stats.StatsScreen
@@ -219,6 +220,7 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
     }
     var toastMessage by remember { mutableStateOf<String?>(null) }
     var sharePlaylist by remember { mutableStateOf<Playlist?>(null) }
+    var showDietCoke by remember { mutableStateOf(false) }
     // Kept after leaving Search, so going back shows its header colour at once.
     var searchTint by remember { mutableStateOf<Color?>(null) }
 
@@ -678,6 +680,7 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
                             // A pushed page keeps the tab it was opened from, as on mobile.
                             current = tabOf(uiState.backStack.firstOrNull() ?: uiState.screen),
                             onSelect = { viewModel.selectTab(it) },
+                            onSupport = { showDietCoke = true },
                         )
                     }
                 }
@@ -690,6 +693,10 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
 
                 sharePlaylist?.let { playlist ->
                     PlaylistShareDialog(playlist = playlist, onDismiss = { sharePlaylist = null })
+                }
+
+                if (showDietCoke) {
+                    DietCokeDialog(onDismiss = { showDietCoke = false })
                 }
 
                 newRelease?.let { release ->
