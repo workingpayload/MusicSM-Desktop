@@ -14,9 +14,15 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
   back-stack; window sized to the usable screen.
 - **Home**: personalized feed like mobile (recently played, quick picks, daily rotation, forgotten
   favorites, ranked with `ShelfRanker`/`TasteProfile`) plus YouTube Music shelves (song rows and
-  album/artist/playlist cards); more shelves load as you scroll.
+  album/artist/playlist cards); more shelves load as you scroll. A **List / Cards** switch in the
+  header (also Settings → Appearance → "Cards on Home") shows songs as mobile's horizontal card
+  shelves instead of rows; right-click a card for the song menu.
 - **Search**: dedicated screen with All / Songs / Videos / Albums / Artists filters, top result,
   recent-search history (`search_history.json`). Videos follow the "Videos in search" setting.
+  Songs, albums and artists opened from results are kept as a **Recent searches** card shelf
+  (`search_recent_items.json`, newest first, × on hover to remove). **Browse all** uses mobile's
+  genre tiles (gradient, sheen and a large genre icon cropped into the corner), after desktop's
+  New releases and Charts.
 - **Song menu** (⋮ or right-click on any song): play next, add to queue, start radio, add to /
   new playlist, go to artist/album, download, share, like.
 - **Library**: liked songs, local playlists, recent plays (`library.json`); **playlist import**

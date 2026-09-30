@@ -94,6 +94,15 @@ fun SettingsScreen(
                 ) {
                     onUpdate { it.copy(amoled = it.amoled.not()) }
                 }
+                SettingsSwitch(
+                    "Cards on Home",
+                    "Show Home's songs as rows of cards, like the phone app, instead of a list.",
+                    settings.homeLayout == HomeLayout.CARDS,
+                ) {
+                    onUpdate {
+                        it.copy(homeLayout = if (it.homeLayout == HomeLayout.CARDS) HomeLayout.LIST else HomeLayout.CARDS)
+                    }
+                }
             }
         }
 

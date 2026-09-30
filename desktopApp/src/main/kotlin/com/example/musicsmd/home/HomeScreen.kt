@@ -3,6 +3,7 @@ package com.example.musicsmd.home
 import com.example.musicsmd.ui.components.ArtistCircle
 import com.example.musicsmd.ui.components.AlbumCard
 import com.example.musicsmd.ui.components.LocalBottomBarPadding
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,13 +14,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,6 +37,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,17 +50,22 @@ import com.example.musicsm.domain.model.HomeSection
 import com.example.musicsm.domain.model.Playlist
 import com.example.musicsm.domain.model.Song
 import com.example.musicsmd.player.AppUiState
+import com.example.musicsmd.settings.HomeLayout
 import com.example.musicsmd.ui.components.ArtworkImage
 import com.example.musicsmd.ui.components.GlassPanel
+import com.example.musicsmd.ui.components.SongCard
 import com.example.musicsmd.ui.components.SongRow
 import com.example.musicsmd.ui.theme.Coral
 import com.example.musicsmd.ui.theme.GlassFill
 import com.example.musicsmd.ui.theme.GlassFillStrong
+import com.example.musicsmd.ui.theme.OnAccent
 import java.time.LocalTime
 
 @Composable
 fun HomeScreen(
     state: AppUiState,
+    layout: HomeLayout,
+    onLayoutChange: (HomeLayout) -> Unit,
     isLiked: (String) -> Boolean,
     onSongClick: (Song, List<Song>) -> Unit,
     onToggleLike: (Song) -> Unit,
@@ -62,8 +77,13 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize().padding(20.dp)) {
-        Text(greeting(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Made from your recent plays, likes and MusicSM picks", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(greeting(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text("Made from your recent plays, likes and MusicSM picks", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            LayoutToggle(layout = layout, onChange = onLayoutChange)
+        }
         Spacer(Modifier.height(14.dp))
 
         when {
@@ -71,6 +91,7 @@ fun HomeScreen(
             state.homeFeed.sections.isEmpty() -> EmptyHome(onRetry = onRetryHome)
             else -> HomeShelves(
                 sections = state.homeFeed.sections,
+                layout = layout,
                 canLoadMore = state.homeFeed.continuation != null,
                 isLoadingMore = state.isLoadingMoreHome,
                 onLoadMore = onLoadMoreHome,
@@ -92,6 +113,7 @@ fun HomeScreen(
 @Composable
 private fun HomeShelves(
     sections: List<HomeSection>,
+    layout: HomeLayout,
     canLoadMore: Boolean,
     isLoadingMore: Boolean,
     onLoadMore: () -> Unit,
@@ -122,22 +144,35 @@ private fun HomeShelves(
         sections.forEachIndexed { index, section ->
             item(key = "title-$index-${section.title}") { ShelfTitle(section.title) }
             val songs = section.items.filterIsInstance<HomeItem.SongItem>().map { it.song }
-            val cards = section.items.filterNot { it is HomeItem.SongItem }
+            val openCard: (HomeItem) -> Unit = { item ->
+                when (item) {
+                    is HomeItem.AlbumItem -> onAlbumClick(item.album)
+                    is HomeItem.ArtistItem -> onArtistClick(item.artist)
+                    is HomeItem.PlaylistItem -> onPlaylistClick(item.playlist)
+                    // Plays the shelf from this song, as a tapped card does on mobile.
+                    is HomeItem.SongItem -> onSongClick(item.song, songs)
+                }
+            }
 
+            if (layout == HomeLayout.CARDS) {
+                // One horizontal shelf per section, in the feed's own order — mobile's Home.
+                item(key = "shelf-$index-${section.title}") {
+                    CardShelf(items = section.items, onClick = openCard) { item ->
+                        SongCard(
+                            song = item.song,
+                            onClick = { openCard(item) },
+                            isLiked = isLiked(item.song.id),
+                            onToggleLike = { onToggleLike(item.song) },
+                        )
+                    }
+                }
+                return@forEachIndexed
+            }
+
+            val cards = section.items.filterNot { it is HomeItem.SongItem }
             if (cards.isNotEmpty()) {
                 item(key = "cards-$index-${section.title}") {
-                    CardShelf(
-                        items = cards,
-                        onClick = { item ->
-                            when (item) {
-                                is HomeItem.AlbumItem -> onAlbumClick(item.album)
-                                is HomeItem.ArtistItem -> onArtistClick(item.artist)
-                                is HomeItem.PlaylistItem -> onPlaylistClick(item.playlist)
-                                is HomeItem.SongItem -> Unit
-                            }
-                        },
-                        card = { it.toCardInfo() },
-                    )
+                    CardShelf(items = cards, onClick = openCard, songCard = {})
                 }
             }
             items(songs, key = { song -> "${section.title}-${song.id}" }) { song ->
@@ -165,16 +200,62 @@ private fun ShelfTitle(title: String) {
 }
 
 @Composable
-private fun <T> CardShelf(items: List<T>, onClick: (T) -> Unit, card: (T) -> CardInfo) {
+private fun CardShelf(
+    items: List<HomeItem>,
+    onClick: (HomeItem) -> Unit,
+    songCard: @Composable (HomeItem.SongItem) -> Unit,
+) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         items(items) { item ->
-            val info = card(item)
-            if (info.circular) {
-                ArtistCircle(name = info.title, artworkUrl = info.artworkUrl, onClick = { onClick(item) })
+            if (item is HomeItem.SongItem) {
+                songCard(item)
             } else {
-                AlbumCard(title = info.title, subtitle = info.subtitle, artworkUrl = info.artworkUrl, onClick = { onClick(item) })
+                val info = item.toCardInfo()
+                if (info.circular) {
+                    ArtistCircle(name = info.title, artworkUrl = info.artworkUrl, onClick = { onClick(item) })
+                } else {
+                    AlbumCard(title = info.title, subtitle = info.subtitle, artworkUrl = info.artworkUrl, onClick = { onClick(item) })
+                }
             }
         }
+    }
+}
+
+/** List / Cards switch, styled like Search's filter chips. */
+@Composable
+private fun LayoutToggle(layout: HomeLayout, onChange: (HomeLayout) -> Unit) {
+    Row(
+        modifier = Modifier.clip(CircleShape).background(GlassFill).padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        LayoutOption(Icons.AutoMirrored.Filled.ViewList, "List", selected = layout == HomeLayout.LIST) {
+            onChange(HomeLayout.LIST)
+        }
+        LayoutOption(Icons.Filled.GridView, "Cards", selected = layout == HomeLayout.CARDS) {
+            onChange(HomeLayout.CARDS)
+        }
+    }
+}
+
+@Composable
+private fun LayoutOption(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
+    val content = if (selected) OnAccent else MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(if (selected) Coral else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = content,
+        )
     }
 }
 

@@ -17,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -57,11 +58,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -75,7 +80,9 @@ import com.example.musicsm.domain.model.Song
 import com.example.musicsmd.player.AppUiState
 import com.example.musicsmd.settings.DesktopSettings
 import com.example.musicsmd.ui.components.ArtworkImage
+import com.example.musicsmd.ui.components.BrowseTileCard
 import com.example.musicsmd.ui.components.GlassPanel
+import com.example.musicsmd.ui.components.SongCard
 import com.example.musicsmd.ui.components.SongRow
 import com.example.musicsmd.ui.theme.Coral
 import com.example.musicsmd.ui.theme.GlassFill
@@ -87,6 +94,8 @@ fun SearchScreen(
     state: AppUiState,
     settings: DesktopSettings,
     historyStore: SearchHistoryStore,
+    /** Mobile's genre tiles; Search adds its own "New releases" and "Charts" ahead of them. */
+    browseGenres: List<BrowseTile>,
     isLiked: (String) -> Boolean,
     onQueryChange: (String) -> Unit,
     onSearch: (includeVideos: Boolean) -> Unit,
@@ -98,8 +107,24 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
 ) {
     val history by historyStore.history.collectAsState()
+    val recentItems by historyStore.items.collectAsState()
+    val browseTiles = remember(browseGenres) { (LeadingBrowseTiles + browseGenres).distinctBy { it.id } }
     var filter by rememberSaveable { mutableStateOf(SearchFilter.ALL) }
     val focusRequester = remember { FocusRequester() }
+
+    // Whatever is opened from the results (or from the recents shelf) is remembered for the shelf.
+    val openSong: (Song, List<Song>) -> Unit = { song, queue ->
+        historyStore.addItem(RecentSearchItem.of(song))
+        onSongClick(song, queue)
+    }
+    val openAlbum: (Album) -> Unit = { album ->
+        historyStore.addItem(RecentSearchItem.of(album))
+        onAlbumClick(album)
+    }
+    val openArtist: (Artist) -> Unit = { artist ->
+        historyStore.addItem(RecentSearchItem.of(artist))
+        onArtistClick(artist)
+    }
 
     fun submit(query: String = state.query) {
         val clean = query.trim()
@@ -174,7 +199,17 @@ fun SearchScreen(
         when {
             state.isSearching -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             state.query.isBlank() -> SearchLanding(
+                recentItems = recentItems,
                 history = history,
+                browseTiles = browseTiles,
+                isLiked = isLiked,
+                onToggleLike = onToggleLike,
+                onOpenSong = { song ->
+                    openSong(song, recentItems.filter { it.kind == RecentKind.SONG }.map { it.toSong() })
+                },
+                onOpenAlbum = openAlbum,
+                onOpenArtist = openArtist,
+                onRemoveItem = historyStore::removeItem,
                 onPickHistory = { query -> onQueryChange(query); submit(query) },
                 onRemoveHistory = historyStore::remove,
                 onClearHistory = historyStore::clear,
@@ -187,10 +222,10 @@ fun SearchScreen(
                 videosEnabled = settings.searchVideos,
                 onSelectFilter = { filter = it },
                 isLiked = isLiked,
-                onSongClick = onSongClick,
+                onSongClick = openSong,
                 onToggleLike = onToggleLike,
-                onAlbumClick = onAlbumClick,
-                onArtistClick = onArtistClick,
+                onAlbumClick = openAlbum,
+                onArtistClick = openArtist,
                 onPlaylistClick = onPlaylistClick,
             )
         }
@@ -203,7 +238,15 @@ fun SearchScreen(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SearchLanding(
+    recentItems: List<RecentSearchItem>,
     history: List<String>,
+    browseTiles: List<BrowseTile>,
+    isLiked: (String) -> Boolean,
+    onToggleLike: (Song) -> Unit,
+    onOpenSong: (Song) -> Unit,
+    onOpenAlbum: (Album) -> Unit,
+    onOpenArtist: (Artist) -> Unit,
+    onRemoveItem: (RecentSearchItem) -> Unit,
     onPickHistory: (String) -> Unit,
     onRemoveHistory: (String) -> Unit,
     onClearHistory: () -> Unit,
@@ -213,28 +256,39 @@ private fun SearchLanding(
         verticalArrangement = Arrangement.spacedBy(18.dp),
         contentPadding = PaddingValues(bottom = 28.dp + LocalBottomBarPadding.current),
     ) {
-        item {
-            if (history.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        Text("Recent searches", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        Text("Clear", color = Coral, modifier = Modifier.clip(CircleShape).clickable(onClick = onClearHistory).padding(8.dp))
-                    }
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        history.forEach { value ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.clip(CircleShape).background(GlassFillStrong).clickable { onPickHistory(value) }
-                                    .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
-                            ) {
-                                Icon(Icons.Filled.History, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Spacer(Modifier.width(6.dp))
-                                Text(value, maxLines = 1)
-                                Icon(
-                                    Icons.Filled.Close,
-                                    contentDescription = "Remove $value",
-                                    modifier = Modifier.size(18.dp).clip(CircleShape).clickable { onRemoveHistory(value) }.padding(2.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        if (recentItems.isNotEmpty() || history.isNotEmpty()) {
+            item(key = "recent-title") {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text("Recent searches", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("Clear", color = Coral, modifier = Modifier.clip(CircleShape).clickable(onClick = onClearHistory).padding(8.dp))
+                }
+            }
+        }
+        if (recentItems.isNotEmpty()) {
+            item(key = "recent-items") {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    items(recentItems, key = { it.key }) { item ->
+                        RemovableCard(label = item.title, onRemove = { onRemoveItem(item) }) {
+                            when (item.kind) {
+                                RecentKind.SONG -> {
+                                    val song = item.toSong()
+                                    SongCard(
+                                        song = song,
+                                        onClick = { onOpenSong(song) },
+                                        isLiked = isLiked(song.id),
+                                        onToggleLike = { onToggleLike(song) },
+                                    )
+                                }
+                                RecentKind.ALBUM -> AlbumCard(
+                                    title = item.title,
+                                    subtitle = listOf("Album", item.subtitle).filter { it.isNotBlank() }.joinToString(" · "),
+                                    artworkUrl = item.artworkUrl,
+                                    onClick = { onOpenAlbum(item.toAlbum()) },
+                                )
+                                RecentKind.ARTIST -> ArtistCircle(
+                                    name = item.title,
+                                    artworkUrl = item.artworkUrl,
+                                    onClick = { onOpenArtist(item.toArtist()) },
                                 )
                             }
                         }
@@ -242,24 +296,93 @@ private fun SearchLanding(
                 }
             }
         }
-        item { Text("Browse all", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-        item {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                defaultBrowseTiles.forEach { tile -> BrowseTileCard(tile, onClick = { onTileClick(tile) }) }
+        if (history.isNotEmpty()) {
+            item(key = "recent-queries") {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    history.forEach { value ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clip(CircleShape).background(GlassFillStrong).clickable { onPickHistory(value) }
+                                .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+                        ) {
+                            Icon(Icons.Filled.History, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.width(6.dp))
+                            Text(value, maxLines = 1)
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Remove $value",
+                                modifier = Modifier.size(18.dp).clip(CircleShape).clickable { onRemoveHistory(value) }.padding(2.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        item(key = "browse-title") { Text("Browse all", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        item(key = "browse-grid") { BrowseGrid(browseTiles, onTileClick) }
+    }
+}
+
+/** A shelf card with a remove button that appears on hover, like the query chips' ×. */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun RemovableCard(label: String, onRemove: () -> Unit, content: @Composable () -> Unit) {
+    var hovered by remember { mutableStateOf(false) }
+    Box(
+        Modifier
+            .onPointerEvent(PointerEventType.Enter) { hovered = true }
+            .onPointerEvent(PointerEventType.Exit) { hovered = false },
+    ) {
+        content()
+        if (hovered) {
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = "Remove $label",
+                tint = Color.White,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(14.dp)
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .clickable(onClick = onRemove)
+                    .padding(4.dp),
+            )
+        }
+    }
+}
+
+/** Genre tiles in even columns that fill the width — mobile's two-column grid, widened for desktop. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun BrowseGrid(tiles: List<BrowseTile>, onTileClick: (BrowseTile) -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val gap = 12.dp
+        val columns = ((maxWidth + gap) / (BROWSE_TILE_MIN_WIDTH + gap)).toInt().coerceAtLeast(2)
+        // Sized in whole pixels: dp widths that add up to exactly the row can round a pixel over
+        // it, and FlowRow would then wrap the last tile onto its own line.
+        val density = LocalDensity.current
+        val gapPx = with(density) { gap.roundToPx() }
+        val tileWidth = with(density) { ((constraints.maxWidth - gapPx * (columns - 1)) / columns).toDp() }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(gap),
+            verticalArrangement = Arrangement.spacedBy(gap),
+            maxItemsInEachRow = columns,
+        ) {
+            tiles.forEach { tile ->
+                BrowseTileCard(
+                    title = tile.title,
+                    color = Color(tile.accentColor),
+                    onClick = { onTileClick(tile) },
+                    modifier = Modifier.width(tileWidth),
+                )
             }
         }
     }
 }
 
-@Composable
-private fun BrowseTileCard(tile: BrowseTile, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier.width(220.dp).height(104.dp).clip(RoundedCornerShape(22.dp))
-            .background(Color(tile.accentColor)).clickable(onClick = onClick).padding(16.dp),
-    ) {
-        Text(tile.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
-    }
-}
+private val BROWSE_TILE_MIN_WIDTH = 200.dp
 
 @Composable
 private fun SearchResultsContent(
@@ -434,11 +557,8 @@ private enum class SearchFilter(val label: String) { ALL("All"), SONGS("Songs"),
 
 private const val PREVIEW_COUNT = 5
 
-private val defaultBrowseTiles = listOf(
+/** Desktop's own tiles, ahead of mobile's genres; overlapping moods come from mobile's list. */
+private val LeadingBrowseTiles = listOf(
     BrowseTile("new", "New releases", 0xFFE85D75, "new releases"),
     BrowseTile("charts", "Charts", 0xFF35C2A1, "top songs"),
-    BrowseTile("chill", "Chill", 0xFF6C7AF2, "chill mix"),
-    BrowseTile("workout", "Workout", 0xFFFF8A3D, "workout music"),
-    BrowseTile("focus", "Focus", 0xFF8E7CFF, "focus music"),
-    BrowseTile("party", "Party", 0xFFE14ECA, "party hits"),
 )

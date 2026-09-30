@@ -255,11 +255,7 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
                         .fillMaxSize()
                         .layerBackdrop(liquidBackdrop)
                         .glassBackdrop(hazeState)
-                        .background(AppBackground)
-                        // Inside the recorded layer, so the strip under the dock is still painted.
-                        // Screens that tint their background extend it into this strip (see
-                        // LocalDockInset), so the colour runs under the glass dock to the window edge.
-                        .padding(start = dockSpace),
+                        .background(AppBackground),
                 ) {
                     Row(modifier = Modifier.fillMaxSize()) {
                         Box(modifier = Modifier.weight(1f)) {
@@ -272,10 +268,19 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
                                 // The outgoing screen keeps the state it had, so it doesn't flash the
                                 // incoming screen's data (or its loading spinner) as it slides away.
                                 val navState = entry.state
+                                // The dock inset is applied inside the animated screen, not around
+                                // it: a fading screen is drawn into a layer clipped to its own box,
+                                // and a tint that runs under the dock (see LocalDockInset) must lie
+                                // inside that box or it is cut off until the fade ends.
+                                Box(Modifier.fillMaxSize().padding(start = dockSpace)) {
                                 saveableStates.SaveableStateProvider(entry.screen.toString()) {
                                     when (val screen = entry.screen) {
                                         Screen.Home -> HomeScreen(
                                             state = navState,
+                                            layout = settings.homeLayout,
+                                            onLayoutChange = { layout ->
+                                                AppGraph.settingsStore.update { it.copy(homeLayout = layout) }
+                                            },
                                             isLiked = ::isLiked,
                                             onSongClick = ::playSong,
                                             onToggleLike = viewModel::toggleLike,
@@ -289,6 +294,7 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
                                             state = navState,
                                             settings = settings,
                                             historyStore = AppGraph.searchHistoryStore,
+                                            browseGenres = remember { AppGraph.musicRepository.browseTiles() },
                                             isLiked = ::isLiked,
                                             onQueryChange = viewModel::onQueryChange,
                                             onSearch = viewModel::search,
@@ -400,6 +406,7 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
                                             onOpenPlaylist = { viewModel.navigateTo(Screen.PlaylistDetail(it.toString())) },
                                         )
                                     }
+                                }
                                 }
                             }
                         }

@@ -147,6 +147,55 @@ fun SongRow(
     }
 }
 
+/**
+ * A song as a shelf card — mobile's Home shows tracks this way. Clicking plays it; right-click
+ * opens the same menu as [SongRow]'s ⋮, since a card has no room for the button.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun SongCard(
+    song: Song,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    isLiked: Boolean? = null,
+    onToggleLike: (() -> Unit)? = null,
+) {
+    val actions = LocalSongActions.current
+    var menuExpanded by remember { mutableStateOf(false) }
+    var playlistsExpanded by remember { mutableStateOf(false) }
+    var showCreatePlaylist by remember { mutableStateOf(false) }
+    val downloaded = remember(song.id, actions) { actions.isDownloaded(song.id) }
+
+    androidx.compose.foundation.layout.Box(
+        modifier = modifier.onPointerEvent(PointerEventType.Press) { event ->
+            if (event.buttons.isSecondaryPressed) menuExpanded = true
+        },
+    ) {
+        AlbumCard(title = song.title, subtitle = song.artist, artworkUrl = song.artworkUrl, onClick = onClick)
+        SongMenu(
+            expanded = menuExpanded,
+            playlistsExpanded = playlistsExpanded,
+            song = song,
+            isLiked = isLiked,
+            downloaded = downloaded,
+            onDismiss = { menuExpanded = false; playlistsExpanded = false },
+            onTogglePlaylists = { playlistsExpanded = !playlistsExpanded },
+            onCreatePlaylist = { showCreatePlaylist = true; menuExpanded = false; playlistsExpanded = false },
+            onToggleLike = onToggleLike,
+        )
+    }
+
+    if (showCreatePlaylist) {
+        NewPlaylistDialog(
+            onCreate = { name ->
+                actions.createPlaylistWith(song, name)
+                showCreatePlaylist = false
+            },
+            onDismiss = { showCreatePlaylist = false },
+        )
+    }
+}
+
 @Composable
 private fun SongMenu(
     expanded: Boolean,

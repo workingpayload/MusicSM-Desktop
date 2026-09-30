@@ -17,6 +17,9 @@ object AppPaths {
 
 enum class RepeatMode { OFF, ALL, ONE }
 
+/** How Home shows its song shelves: a vertical list of rows, or mobile's horizontal cards. */
+enum class HomeLayout { LIST, CARDS }
+
 /**
  * Every user setting, persisted as one JSON file — the desktop counterpart of the mobile app's
  * SharedPreferences-backed `AppPreferences`. New fields must have defaults so older files load.
@@ -39,6 +42,7 @@ data class DesktopSettings(
     val themeFromArtwork: Boolean = true,
     // Mobile's "AMOLED black": pure black base surfaces.
     val amoled: Boolean = false,
+    val homeLayout: HomeLayout = HomeLayout.LIST,
 
     // Lyrics — names of `com.example.musicsm.domain.model.LyricsSource` entries.
     val lyricsSourceOrder: List<String> = emptyList(),

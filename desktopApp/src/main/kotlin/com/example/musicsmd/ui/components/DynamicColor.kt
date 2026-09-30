@@ -23,7 +23,9 @@ import kotlin.math.abs
  */
 @Composable
 fun rememberDominantColorState(url: String?, fallback: Color): State<Color> {
-    var target by remember { mutableStateOf(fallback) }
+    // Starts from the cached colour, so coming back to a screen shows its tint at once instead of
+    // fading in from the fallback again.
+    var target by remember { mutableStateOf(ArtworkColors.cachedAccentFor(url) ?: fallback) }
 
     LaunchedEffect(url, fallback) {
         target = ArtworkColors.accentFor(url) ?: fallback

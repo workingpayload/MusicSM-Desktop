@@ -29,6 +29,12 @@ object ArtworkColors {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Int>?): Boolean = size > MAX_ENTRIES
     }
 
+    /** The cover's accent if it has already been extracted; `null` when unknown or colourless. */
+    fun cachedAccentFor(url: String?): Color? {
+        if (url.isNullOrEmpty()) return null
+        return synchronized(cache) { cache[url] }?.takeIf { it != NO_SWATCH }?.let(::Color)
+    }
+
     /** The cover's accent, or `null` when there is no cover or it has no usable colour. */
     suspend fun accentFor(url: String?): Color? {
         if (url.isNullOrEmpty()) return null
