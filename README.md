@@ -31,7 +31,9 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
   lyrics / output / queue row). Shuffle, repeat off/all/one, speed, sleep timer with fade-out,
   equalizer; the output picker and sleep timer open as mobile's Liquid Glass sheet. Autoplay radio
   continues with related tracks when the queue ends; the queue (paused) and volume are restored on
-  launch.
+  launch. As on mobile, the next track's stream URL is looked up ahead of time, so skipping starts
+  almost at once; the old track stops the moment you switch, and the play button shows a spinner
+  while a new track loads.
 - **Synced lyrics**: the mobile lyrics stack (Apple Music, BiniLyrics, LyricsPlus, SimpMusic,
   LRCLIB, KuGou, Unison, YouTube Music) with word-by-word highlighting, click-to-seek and per-song
   sync offset, shown beside the artwork in Now Playing.
@@ -100,6 +102,7 @@ All app data lives in `~/.musicsm-desktop/` (`settings.json`, `library.json`, `s
 ## Notes carried over from the mobile app
 
 - Not distributed on app stores: same YouTube ToS / GPLv3 (NewPipeExtractor) considerations apply.
-- Stream URLs expire (~6h) and are IP-bound — resolved per track at play time, never cached long.
+- Stream URLs expire (~6h) and are IP-bound — cached in memory for ~5h (`MusicRepository`), and
+  re-resolved once if libVLC reports a playback error.
 - `YouTubeMusicSource` dispatches by id shape (`MPREb_…` album / `UC…` channel → InnerTube; URLs /
   bare names → NewPipe). Metadata falls back to NewPipe silently; stream resolution has no fallback.

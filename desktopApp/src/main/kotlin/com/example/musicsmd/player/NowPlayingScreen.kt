@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.outlined.Headphones
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -418,7 +419,17 @@ private fun PlayerColumn(
             IconButton(onClick = onPrevious, enabled = state.queueIndex > 0 || state.positionMs > 3_000) {
                 Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous", tint = Color.White, modifier = Modifier.size(36.dp))
             }
-            PlayPauseButton(isPlaying = state.isPlaying, onClick = onTogglePlayPause, size = 72.dp)
+            // Play/pause, ringed by a progress indicator while the stream buffers.
+            Box(contentAlignment = Alignment.Center) {
+                PlayPauseButton(isPlaying = state.isPlaying, onClick = onTogglePlayPause, size = 72.dp)
+                if (state.isBuffering) {
+                    CircularProgressIndicator(
+                        color = Color.White.copy(alpha = 0.85f),
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(84.dp),
+                    )
+                }
+            }
             IconButton(onClick = onNext) {
                 Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = Color.White, modifier = Modifier.size(36.dp))
             }

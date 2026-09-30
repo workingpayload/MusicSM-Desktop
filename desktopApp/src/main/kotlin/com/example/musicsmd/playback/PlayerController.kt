@@ -26,12 +26,30 @@ class PlayerController {
     val mediaPlayer: MediaPlayer get() = audioComponent.mediaPlayer()
 
     var onEndReached: (() -> Unit)? = null
+    var onError: (() -> Unit)? = null
+
+    /** Fired once per [play], when the new track's first audio has actually played. */
+    var onAudioStarted: (() -> Unit)? = null
     var onPositionChanged: ((positionMs: Long, durationMs: Long) -> Unit)? = null
+
+    @Volatile
+    private var awaitingAudio = false
 
     init {
         mediaPlayer.events().addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
+            override fun timeChanged(mediaPlayer: MediaPlayer, newTime: Long) {
+                if (awaitingAudio && newTime > 0) {
+                    awaitingAudio = false
+                    onAudioStarted?.invoke()
+                }
+            }
+
             override fun finished(mediaPlayer: MediaPlayer) {
                 onEndReached?.invoke()
+            }
+
+            override fun error(mediaPlayer: MediaPlayer) {
+                onError?.invoke()
             }
 
             override fun positionChanged(mediaPlayer: MediaPlayer, newPosition: Float) {
@@ -41,8 +59,15 @@ class PlayerController {
         })
     }
 
-    fun play(stream: PlayableStream, rate: Float = 1f, startPositionMs: Long = 0L, outputDeviceId: String? = null) {
-        mediaPlayer.media().play(stream.url)
+    fun play(
+        stream: PlayableStream,
+        rate: Float = 1f,
+        startPositionMs: Long = 0L,
+        outputDeviceId: String? = null,
+        paused: Boolean = false,
+    ) {
+        awaitingAudio = !paused
+        if (paused) mediaPlayer.media().play(stream.url, ":start-paused") else mediaPlayer.media().play(stream.url)
         setPlaybackSpeed(rate)
         outputDeviceId?.let(::setOutputDevice)
         if (startPositionMs > 0L) {

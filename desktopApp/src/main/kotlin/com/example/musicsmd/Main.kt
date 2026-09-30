@@ -474,6 +474,7 @@ fun main() {
     AppGraph.init()
     val viewModel = AppViewModel(
         musicSource = AppGraph.musicSource,
+        streams = AppGraph.musicRepository,
         library = AppGraph.libraryRepository,
         statsRepository = AppGraph.statsRepository,
         player = AppGraph.playerController,

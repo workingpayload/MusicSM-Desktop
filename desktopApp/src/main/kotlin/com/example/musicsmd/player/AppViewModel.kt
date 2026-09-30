@@ -7,6 +7,7 @@ import com.example.musicsm.domain.model.Playlist
 import com.example.musicsm.domain.model.SearchResults
 import com.example.musicsm.domain.model.Song
 import com.example.musicsm.domain.repository.LibraryRepository
+import com.example.musicsm.domain.repository.MusicRepository
 import com.example.musicsm.domain.repository.StatsRepository
 import com.example.musicsm.domain.source.MusicSource
 import com.example.musicsmd.home.DesktopHomeFeedBuilder
@@ -23,7 +24,10 @@ import com.example.musicsmd.settings.SettingsStore
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,6 +43,8 @@ import kotlinx.coroutines.launch
 data class PlaybackUiState(
     val currentSong: Song? = null,
     val isPlaying: Boolean = false,
+    /** A track switch is in flight: the stream is being looked up or libVLC hasn't produced audio yet. */
+    val isBuffering: Boolean = false,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
     val queue: List<Song> = emptyList(),
@@ -80,6 +86,8 @@ data class AppUiState(
  */
 class AppViewModel(
     private val musicSource: MusicSource,
+    /** Stream lookups go through the repository so resolved URLs are cached, as on mobile. */
+    private val streams: MusicRepository,
     private val library: LibraryRepository,
     private val statsRepository: StatsRepository,
     private val player: PlayerController,
@@ -109,8 +117,18 @@ class AppViewModel(
     private var listenedMs = 0L
     private var lastPositionMs = 0L
     private var originalQueue: List<Song> = emptyList()
+
+    /** The song libVLC is actually playing; null while switching, so the old track's events are ignored. */
+    @Volatile
     private var loadedSongId: String? = null
     private var hasActiveSongForStats = false
+
+    // Every track switch takes a new request number; a lookup that finishes after the user has
+    // already moved on sees a newer number and never starts playing over the song they picked.
+    private val playLock = Any()
+    private var playRequest = 0L
+    private var loadJob: Job? = null
+    private var retriedSongId: String? = null
 
     init {
         val settings = settingsStore.current
@@ -134,18 +152,23 @@ class AppViewModel(
             )
         }
         player.onPositionChanged = { positionMs, durationMs ->
-            val delta = positionMs - lastPositionMs
-            if (delta in 1..MAX_TICK_MS) listenedMs += delta
-            lastPositionMs = positionMs
-            _playback.update { it.copy(positionMs = positionMs, durationMs = durationMs) }
+            if (loadedSongId != null) {
+                val delta = positionMs - lastPositionMs
+                if (delta in 1..MAX_TICK_MS) listenedMs += delta
+                lastPositionMs = positionMs
+                _playback.update { it.copy(positionMs = positionMs, durationMs = durationMs) }
+            }
         }
-        player.onEndReached = { onTrackEnded() }
+        player.onEndReached = { if (loadedSongId != null) onTrackEnded() }
+        player.onAudioStarted = { if (loadedSongId != null) _playback.update { it.copy(isBuffering = false) } }
+        player.onError = { onPlaybackError() }
         restoreQueueIfNeeded()
         loadHome()
         observeLibrary()
         observeSettings()
         observeSleepTimer()
         observeQueuePersistence()
+        observeUpcomingForPrefetch()
     }
 
     private fun observeLibrary() {
@@ -222,6 +245,25 @@ class AppViewModel(
                 durationMs = current.durationMs,
                 isPlaying = false,
             )
+        }
+        prefetchStream(current.id)
+    }
+
+    /** Mobile parity: warm the next track's stream URL so skipping or auto-advancing starts at once. */
+    @OptIn(FlowPreview::class)
+    private fun observeUpcomingForPrefetch() {
+        scope.launch {
+            _playback.map { state -> nextIndexOf(state)?.let { state.queue[it].id } }
+                .distinctUntilChanged()
+                .debounce(PREFETCH_DEBOUNCE_MS)
+                .collect { id -> if (id != null) prefetchStream(id) }
+        }
+    }
+
+    private fun prefetchStream(songId: String) {
+        if (songId.startsWith(LOCAL_ID_PREFIX)) return
+        scope.launch(Dispatchers.IO) {
+            if (offlineSource.localStream(songId) == null) runCatching { streams.resolveStream(songId) }
         }
     }
 
@@ -429,13 +471,15 @@ class AppViewModel(
 
     fun playNextInQueue() {
         val state = _playback.value
-        val nextIndex = when {
-            state.queueIndex + 1 in state.queue.indices -> state.queueIndex + 1
-            state.repeatMode == RepeatMode.ALL && state.queue.isNotEmpty() -> 0
-            else -> return
-        }
+        val nextIndex = nextIndexOf(state) ?: return
         val next = state.queue.getOrNull(nextIndex) ?: return
         scope.launch { startSong(next, state.queue, nextIndex) }
+    }
+
+    private fun nextIndexOf(state: PlaybackUiState): Int? = when {
+        state.queueIndex + 1 in state.queue.indices -> state.queueIndex + 1
+        state.repeatMode == RepeatMode.ALL && state.queue.isNotEmpty() -> 0
+        else -> null
     }
 
     fun playPreviousInQueue() {
@@ -546,6 +590,7 @@ class AppViewModel(
 
     /** The single path every track change goes through, so listeners and stats see all of them. */
     private suspend fun startSong(song: Song, queue: List<Song>, index: Int, startPositionMs: Long = 0L) {
+        loadedSongId = null
         finishCurrentSong()
         val safeIndex = index.coerceIn(queue.indices)
         _playback.update {
@@ -559,9 +604,66 @@ class AppViewModel(
             )
         }
         hasActiveSongForStats = true
+        retriedSongId = null
+        loadSong(song)
         playbackListeners.forEach { runCatching { it.onSongStarted(song) } }
         library.recordPlay(song)
-        resolveAndPlay(song, startPositionMs)
+    }
+
+    /** Swaps libVLC over to [song], superseding any switch still waiting on its stream. */
+    private fun loadSong(song: Song) = synchronized(playLock) {
+        loadedSongId = null
+        _playback.update { it.copy(isBuffering = true) }
+        val request = ++playRequest
+        loadJob?.cancel()
+        loadJob = scope.launch { resolveAndPlay(song, request) }
+    }
+
+    private suspend fun resolveAndPlay(song: Song, request: Long) = coroutineScope {
+        val lookup = async(Dispatchers.IO) {
+            runCatching { offlineSource.localStream(song.id) ?: streams.resolveStream(song.id) }
+        }
+        // Silence the old track now, not once the new one is ready; libVLC's stop blocks for a
+        // moment, so it runs while the lookup is in flight.
+        player.stop()
+        val result = lookup.await()
+        synchronized(playLock) {
+            if (request != playRequest) return@coroutineScope
+            result
+                .onSuccess { stream ->
+                    val state = _playback.value
+                    loadedSongId = song.id
+                    player.play(
+                        stream = stream,
+                        rate = state.playbackSpeed,
+                        startPositionMs = state.positionMs,
+                        outputDeviceId = state.audioOutputDevice,
+                        paused = !state.isPlaying,
+                    )
+                    if (!state.isPlaying) _playback.update { it.copy(isBuffering = false) }
+                }
+                .onFailure { e ->
+                    _playback.update { it.copy(isPlaying = false, isBuffering = false) }
+                    _uiState.update { it.copy(error = e.message) }
+                }
+        }
+    }
+
+    /** A cached URL can go stale (or be refused); fetch a fresh one once before giving up. */
+    private fun onPlaybackError() {
+        scope.launch {
+            val song = _playback.value.currentSong ?: return@launch
+            if (loadedSongId != song.id) return@launch
+            if (retriedSongId == song.id) {
+                loadedSongId = null
+                _playback.update { it.copy(isPlaying = false, isBuffering = false) }
+                _uiState.update { it.copy(error = "Couldn't play ${song.title}") }
+                return@launch
+            }
+            retriedSongId = song.id
+            streams.invalidateStream(song.id)
+            loadSong(song)
+        }
     }
 
     private fun finishCurrentSong() {
@@ -573,23 +675,6 @@ class AppViewModel(
         lastPositionMs = 0L
         hasActiveSongForStats = false
         playbackListeners.forEach { runCatching { it.onSongFinished(current, listened, state.durationMs) } }
-    }
-
-    private suspend fun resolveAndPlay(song: Song, startPositionMs: Long = 0L) {
-        runCatching { offlineSource.localStream(song.id) ?: musicSource.resolveStream(song.id) }
-            .onSuccess { stream ->
-                player.play(
-                    stream = stream,
-                    rate = _playback.value.playbackSpeed,
-                    startPositionMs = startPositionMs,
-                    outputDeviceId = _playback.value.audioOutputDevice,
-                )
-                loadedSongId = song.id
-            }
-            .onFailure { e ->
-                _playback.update { it.copy(isPlaying = false) }
-                _uiState.update { it.copy(error = e.message) }
-            }
     }
 
     private fun onTrackEnded() {
@@ -693,5 +778,8 @@ class AppViewModel(
         const val MAX_TICK_MS = 3_000L
         const val RESTART_PREVIOUS_MS = 3_000L
         const val LOCAL_ID_PREFIX = "local:"
+
+        /** Lets rapid skips and queue edits settle before looking up the next track. */
+        const val PREFETCH_DEBOUNCE_MS = 500L
     }
 }
