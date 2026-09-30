@@ -1,0 +1,117 @@
+name: Release
+
+# Pushing a tag like v1.2.3 builds the Windows MSI and the macOS DMG and publishes both in a GitHub
+# Release for that tag. "Run workflow" on the Actions tab builds them as well, but only as run
+# artifacts (version 1.0.0, no Release).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            task: packageMsi
+            format: msi
+            suffix: windows-x64
+          - name: macOS
+            os: macos-latest # Apple Silicon
+            task: packageDmg
+            format: dmg
+            suffix: macos-arm64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      # The app compiles with a JDK 17 toolchain. Gradle itself runs on JDK 25
+      # (gradle/gradle-daemon-jvm.properties), whose jpackage builds the installer.
+      - name: Set up JDK 17
+        id: jdk17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      # The installers carry libVLC (see prepareBundledVlc), copied from the VLC installed here.
+      - name: Install VLC
+        run: |
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            choco install vlc --no-progress -y
+          else
+            brew install --cask vlc
+          fi
+
+      # v1.2.3 -> 1.2.3. A suffix like -beta is dropped: installer versions must be plain numbers.
+      - name: Work out the version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then v="${GITHUB_REF_NAME#v}"; v="${v%%-*}"; else v=1.0.0; fi
+          echo "Version: $v"
+          echo "value=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Build the ${{ matrix.format }}
+        env:
+          JDK17: ${{ steps.jdk17.outputs.path }}
+          APP_VERSION: ${{ steps.version.outputs.value }}
+        run: >
+          ./gradlew :desktopApp:${{ matrix.task }}
+          "-PappVersion=$APP_VERSION"
+          -PrequireVlc=true
+          "-Dorg.gradle.java.installations.paths=$JDK17"
+
+      - name: Name the installer
+        env:
+          APP_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          mkdir -p dist
+          for f in desktopApp/build/compose/binaries/main/${{ matrix.format }}/*.${{ matrix.format }}; do
+            mv "$f" "dist/MusicSM-Desktop-$APP_VERSION-${{ matrix.suffix }}.${{ matrix.format }}"
+          done
+          ls -l dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installer-${{ matrix.suffix }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish the Release
+    needs: package
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: installer-*
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          # Tags like v1.2.0-beta become pre-releases.
+          prerelease: ${{ contains(github.ref_name, '-') }}

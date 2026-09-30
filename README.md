@@ -113,9 +113,12 @@ All app data lives in `~/.musicsm-desktop/` (`settings.json`, `library.json`, `s
 ## Requirements
 
 - JDK 25 — Gradle's daemon toolchain (`gradle/gradle-daemon-jvm.properties`); Android Studio's
-  bundled JBR is one, and is enough to build and run.
-- [VLC](https://www.videolan.org/vlc/) installed on the host machine (desktopApp uses libVLC
-  through vlcj for audio playback — Media3 is Android-only, so there's no direct equivalent).
+  bundled JBR is one, and is enough to run Gradle.
+- JDK 17 — the toolchain the app is compiled with (`jvmToolchain(17)`); any installed JDK 17
+  (e.g. Temurin) is found automatically.
+- [VLC](https://www.videolan.org/vlc/) installed on the build machine. desktopApp plays audio
+  through libVLC (via vlcj — Media3 is Android-only, so there's no direct equivalent); `run` and
+  the installers use a copy of it (see Packaging), so people who install the app don't need VLC.
 
 ## Running
 
@@ -126,14 +129,50 @@ All app data lives in `~/.musicsm-desktop/` (`settings.json`, `library.json`, `s
 ## Packaging
 
 Installers are built by `jpackage`, which Android Studio's JBR doesn't include, so point packaging
-at a full JDK 25 or newer:
+at a full JDK 17 or newer:
 
 ```powershell
 .\gradlew.bat :desktopApp:packageMsi "-PpackagingJdk=C:\Program Files\Java\jdk-27"
 ```
 
 The installer lands in `desktopApp\build\compose\binaries\main\msi\` and adds a Start-menu entry.
-`createDistributable` builds the unpacked app (`...\main\app\`) without an installer.
+`createDistributable` builds the unpacked app (`...\main\app\`) without an installer. On a Mac,
+`./gradlew :desktopApp:packageDmg` builds the DMG; each installer can only be built on its own OS.
+
+**Bundled VLC.** `prepareBundledVlc` copies libVLC from the build machine's VLC install
+(`C:\Program Files\VideoLAN\VLC`, or `/Applications/VLC.app` on macOS) into the app's resources, and
+`BundledVlcDirectoryProvider` points vlcj at that copy at run time. On Windows only the audio-player
+parts are taken (~44 MB of VLC's ~180 MB); on macOS the whole library and plugin set goes, as that
+side hasn't been trimmed or tested on a Mac yet. Options:
+
+- `-PvlcDir=<dir>` — bundle a VLC from somewhere else (on macOS, `VLC.app/Contents/MacOS`).
+- `-PbundleVlc=false` — leave VLC out; the app then uses the VLC installed on the system.
+- `-PrequireVlc=true` — fail instead of warning when there is no VLC to bundle (used by CI).
+- `-PappVersion=1.2.3` — the installer version (default `1.0.0`). It must be plain numbers, and
+  the first one must be at least 1 for the DMG.
+
+## Releases
+
+`.github/workflows/release.yml` builds the Windows MSI (`windows-latest`) and the macOS DMG
+(`macos-latest`, Apple Silicon) on GitHub Actions, VLC bundled, and publishes both in a GitHub
+Release:
+
+```powershell
+git remote add origin https://github.com/<you>/MusicSM-Desktop.git
+git push -u origin master
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The tag sets the version (`v1.2.3` → 1.2.3; `v1.2.3-beta` → 1.2.3, published as a pre-release).
+**Run workflow** on the Actions tab builds the installers without a Release (they're attached to
+the run as artifacts).
+
+The installers aren't code-signed, so Windows SmartScreen shows "Windows protected your PC" (More
+info → Run anyway), and macOS blocks the first launch (System Settings → Privacy & Security → Open
+Anyway, or `xattr -dr com.apple.quarantine "/Applications/MusicSM Desktop.app"`). The app links
+NewPipeExtractor (GPLv3) and ships libVLC (LGPL), so releases should come with the source under
+GPLv3 — a public repo covers that.
 
 ## Notes carried over from the mobile app
 
