@@ -109,32 +109,46 @@ fun SearchScreen(
     var filter by rememberSaveable { mutableStateOf(SearchFilter.ALL) }
     val focusRequester = remember { FocusRequester() }
 
-    // Whatever is opened from the results (or from the recents shelf) is remembered for the shelf.
+    // Whatever is opened from the results (or from the recents shelf) is remembered for the shelf,
+    // along with the query that found it. Queries are only kept once they have been used like this,
+    // or submitted with Enter, so searching as you type doesn't fill history with half-typed words.
+    fun rememberQuery() {
+        state.query.trim().takeIf { it.isNotEmpty() }?.let(historyStore::add)
+    }
     val openSong: (Song, List<Song>) -> Unit = { song, queue ->
+        rememberQuery()
         historyStore.addItem(RecentSearchItem.of(song))
         onSongClick(song, queue)
     }
     val openAlbum: (Album) -> Unit = { album ->
+        rememberQuery()
         historyStore.addItem(RecentSearchItem.of(album))
         onAlbumClick(album)
     }
     val openArtist: (Artist) -> Unit = { artist ->
+        rememberQuery()
         historyStore.addItem(RecentSearchItem.of(artist))
         onArtistClick(artist)
     }
 
+    /** Enter (or a tile / history pick): search now rather than after the typing pause. */
     fun submit(query: String = state.query) {
         val clean = query.trim()
         if (clean.isBlank()) return
         historyStore.add(clean)
         onSearch(settings.searchVideos)
-        filter = SearchFilter.ALL
     }
 
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     LaunchedEffect(settings.searchVideos) {
         if (!settings.searchVideos && filter == SearchFilter.VIDEOS) filter = SearchFilter.ALL
     }
+    // Refining a query keeps the chosen filter; a fresh search (after clearing the box) starts on All.
+    LaunchedEffect(state.query.isBlank()) {
+        if (state.query.isBlank()) filter = SearchFilter.ALL
+    }
+    // Typed ahead of the results shown: the next search is pending or running.
+    val searchPending = state.query.isNotBlank() && (state.isSearching || state.query.trim() != state.searchedQuery)
 
     // Tint the header by the top result's artwork (falls back to the accent), as on mobile. The
     // gradient itself is drawn behind the page by the app (see HeaderWash), so Search only says
@@ -164,9 +178,15 @@ fun SearchScreen(
                 placeholder = { Text("Songs, albums, artists…") },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 trailingIcon = {
-                    if (state.query.isNotEmpty()) {
-                        IconButton(onClick = { onQueryChange("") }) {
-                            Icon(Icons.Filled.Close, contentDescription = "Clear")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Results stay on screen while the next ones load; this says they're coming.
+                        if (searchPending && !state.searchResults.isEmpty) {
+                            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                        }
+                        if (state.query.isNotEmpty()) {
+                            IconButton(onClick = { onQueryChange("") }) {
+                                Icon(Icons.Filled.Close, contentDescription = "Clear")
+                            }
                         }
                     }
                 },
@@ -185,7 +205,6 @@ fun SearchScreen(
 
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         when {
-            state.isSearching -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             state.query.isBlank() -> SearchLanding(
                 recentItems = recentItems,
                 history = history,
@@ -203,6 +222,9 @@ fun SearchScreen(
                 onClearHistory = historyStore::clear,
                 onTileClick = { tile -> onQueryChange(tile.query); submit(tile.query) },
             )
+            // Nothing to show yet: the first results for this query are on their way.
+            state.searchResults.isEmpty && searchPending ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             state.searchResults.isEmpty -> EmptyResults(state.query)
             else -> SearchResultsContent(
                 results = state.searchResults,

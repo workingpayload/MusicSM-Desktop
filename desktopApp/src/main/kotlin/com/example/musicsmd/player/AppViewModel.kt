@@ -22,6 +22,7 @@ import com.example.musicsmd.playback.SleepTimerState
 import com.example.musicsmd.settings.RepeatMode
 import com.example.musicsmd.settings.SettingsStore
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -67,6 +68,8 @@ data class AppUiState(
     val query: String = "",
     val isSearching: Boolean = false,
     val searchResults: SearchResults = SearchResults(),
+    /** The query [searchResults] belong to; while typing, [query] runs ahead of it. */
+    val searchedQuery: String = "",
     val homeFeed: HomeFeed = HomeFeed(),
     val isLoadingHome: Boolean = true,
     val isLoadingMoreHome: Boolean = false,
@@ -134,6 +137,9 @@ class AppViewModel(
     private var playRequest = 0L
     private var loadJob: Job? = null
     private var retriedSongId: String? = null
+
+    private var searchJob: Job? = null
+    private var lastSearchVideos: Boolean? = null
 
     init {
         val settings = settingsStore.current
@@ -218,6 +224,12 @@ class AppViewModel(
                     )
                 }
                 if (!settings.restoreQueue) queuePersistence.clear()
+                // Flipping "Videos in search" re-runs the current search, as on mobile.
+                if (settings.searchVideos != lastSearchVideos) {
+                    val first = lastSearchVideos == null
+                    lastSearchVideos = settings.searchVideos
+                    if (!first && _uiState.value.searchedQuery.isNotEmpty()) search(settings.searchVideos)
+                }
             }
         }
     }
@@ -334,15 +346,50 @@ class AppViewModel(
 
     fun onQueryChange(query: String) {
         _uiState.update { it.copy(query = query) }
+        searchJob?.cancel()
+        if (query.isBlank()) {
+            _uiState.update { it.copy(isSearching = false, searchResults = SearchResults(), searchedQuery = "") }
+            return
+        }
+        // A trailing space doesn't change what's being searched for.
+        if (query.trim() == _uiState.value.searchedQuery) {
+            _uiState.update { it.copy(isSearching = false) }
+            return
+        }
+        // Search as you type, as mobile does: once typing pauses, and each keystroke restarts the wait.
+        searchJob = scope.launch {
+            delay(SEARCH_DEBOUNCE_MS)
+            runSearch(query, settingsStore.current.searchVideos)
+        }
     }
 
-    fun search(includeVideos: Boolean = false) = scope.launch {
+    /** Searches for the current query right away (Enter, or another screen asking for a search). */
+    fun search(includeVideos: Boolean = settingsStore.current.searchVideos) {
+        searchJob?.cancel()
         val query = _uiState.value.query
-        if (query.isBlank()) return@launch
+        if (query.isBlank()) return
+        searchJob = scope.launch { runSearch(query, includeVideos) }
+    }
+
+    private suspend fun runSearch(query: String, includeVideos: Boolean) {
+        val clean = query.trim()
         _uiState.update { it.copy(isSearching = true, error = null) }
-        runCatching { musicSource.search(query, includeVideos = includeVideos) }
-            .onSuccess { results -> _uiState.update { it.copy(searchResults = results, isSearching = false) } }
-            .onFailure { e -> _uiState.update { it.copy(isSearching = false, error = e.message) } }
+        val outcome = try {
+            Result.success(musicSource.search(clean, includeVideos = includeVideos))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            Result.failure(failure)
+        }
+        // A lookup can't always be interrupted; one that finishes after the user has typed on must
+        // not replace the results for what they typed since.
+        _uiState.update { state ->
+            if (state.query.trim() != clean) return@update state
+            outcome.fold(
+                onSuccess = { results -> state.copy(searchResults = results, searchedQuery = clean, isSearching = false) },
+                onFailure = { e -> state.copy(isSearching = false, searchedQuery = clean, error = e.message) },
+            )
+        }
     }
 
     // ---- Album / Artist / Playlist detail ----
@@ -796,5 +843,8 @@ class AppViewModel(
 
         /** Lets rapid skips and queue edits settle before looking up the next track. */
         const val PREFETCH_DEBOUNCE_MS = 500L
+
+        /** Mobile's search-as-you-type pause. */
+        const val SEARCH_DEBOUNCE_MS = 350L
     }
 }

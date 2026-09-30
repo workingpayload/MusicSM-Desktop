@@ -19,6 +19,11 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
   shelves instead of rows; right-click a card for the song menu.
 - **Search**: dedicated screen with All / Songs / Videos / Albums / Artists filters, top result,
   recent-search history (`search_history.json`). Videos follow the "Videos in search" setting.
+  Searches as you type, as on mobile: 350 ms after typing pauses (Enter searches at once), with
+  the previous results kept on screen and a small spinner in the field until the new ones arrive;
+  a lookup overtaken by further typing is dropped. Queries join the history when submitted with
+  Enter or when one of their results is opened, not while being typed. The filter chip is kept
+  while refining a query and resets when the box is cleared.
   Songs, albums and artists opened from results are kept as a **Recent searches** card shelf
   (`search_recent_items.json`, newest first, × on hover to remove). **Browse all** uses mobile's
   genre tiles (gradient, sheen and a large genre icon cropped into the corner), after desktop's
