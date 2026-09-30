@@ -20,13 +20,23 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import java.awt.GraphicsEnvironment
 import com.example.musicsm.domain.model.Song
+import com.example.musicsmd.audio.EqualizerScreen
+import com.example.musicsmd.downloads.DownloadsScreen
 import com.example.musicsmd.home.HomeScreen
+import com.example.musicsmd.importer.ImportScreen
 import com.example.musicsmd.library.LibraryScreen
+import com.example.musicsmd.local.LocalMusicScreen
 import com.example.musicsmd.nav.Screen
+import com.example.musicsmd.nav.TopLevelScreens
 import com.example.musicsmd.player.AppViewModel
+import com.example.musicsmd.player.LocalSongActions
 import com.example.musicsmd.player.NowPlayingScreen
 import com.example.musicsmd.player.PlayerBar
 import com.example.musicsmd.player.QueuePanel
+import com.example.musicsmd.player.SongActions
+import com.example.musicsmd.settings.SettingsScreen
+import com.example.musicsmd.share.SharedPlaylistScreen
+import com.example.musicsmd.stats.StatsScreen
 import com.example.musicsmd.ui.NavRail
 import com.example.musicsmd.ui.components.LocalHazeState
 import com.example.musicsmd.ui.components.glassBackdrop
@@ -47,9 +57,21 @@ fun App(viewModel: AppViewModel) {
 
     fun playSong(song: Song, queue: List<Song>) = viewModel.play(song, queue)
 
+    val songActions = SongActions(
+        playNext = viewModel::playNext,
+        addToQueue = viewModel::addToQueue,
+        startRadio = { viewModel.startRadio(it) },
+        playlists = uiState.playlists,
+        addToPlaylist = { song, playlistId -> viewModel.addToPlaylist(playlistId, song) },
+        goToArtist = { song ->
+            val name = song.artist.split(",", "&").first().trim()
+            if (name.isNotEmpty()) viewModel.navigateTo(Screen.ArtistDetail(name))
+        },
+    )
+
     MusicSMTheme {
         val hazeState = rememberHazeState()
-        CompositionLocalProvider(LocalHazeState provides hazeState) {
+        CompositionLocalProvider(LocalHazeState provides hazeState, LocalSongActions provides songActions) {
             Surface(modifier = Modifier.fillMaxSize(), color = SurfaceLowest) {
                 if (playback.isExpanded && playback.currentSong != null) {
                     NowPlayingScreen(
@@ -123,6 +145,13 @@ fun App(viewModel: AppViewModel) {
                                             onSongClick = ::playSong,
                                             onToggleLike = viewModel::toggleLike,
                                         )
+                                        Screen.Downloads -> DownloadsScreen()
+                                        Screen.LocalMusic -> LocalMusicScreen()
+                                        Screen.Stats -> StatsScreen()
+                                        Screen.Settings -> SettingsScreen()
+                                        Screen.Equalizer -> EqualizerScreen()
+                                        Screen.Import -> ImportScreen()
+                                        is Screen.SharedPlaylist -> SharedPlaylistScreen(payload = screen.payload)
                                     }
                                 }
 
@@ -157,9 +186,11 @@ fun App(viewModel: AppViewModel) {
     }
 }
 
-/** Collapses detail screens back to whichever sidebar tab they were pushed from. */
+/** Collapses pushed screens back to whichever sidebar tab they belong to. */
 private fun tabOf(screen: Screen): Screen = when (screen) {
-    Screen.Home, Screen.Search, Screen.Library -> screen
+    in TopLevelScreens -> screen
+    Screen.Equalizer -> Screen.Settings
+    Screen.Import, is Screen.SharedPlaylist -> Screen.Library
     else -> Screen.Home
 }
 
@@ -169,6 +200,8 @@ fun main() {
         musicSource = AppGraph.musicSource,
         library = AppGraph.libraryRepository,
         player = AppGraph.playerController,
+        offlineSource = AppGraph.offlineSource,
+        playbackListeners = AppGraph.playbackListeners,
     )
 
     application {

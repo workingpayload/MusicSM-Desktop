@@ -3,14 +3,19 @@ package com.example.musicsmd.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -33,12 +38,17 @@ fun NavRail(current: Screen, onSelect: (Screen) -> Unit) {
         tint = GlassFillStrong,
     ) {
         Column(
-            modifier = Modifier.fillMaxHeight().padding(top = 24.dp),
+            modifier = Modifier.fillMaxHeight().padding(top = 24.dp, bottom = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             RailItem(Icons.Filled.Home, "Home", current == Screen.Home) { onSelect(Screen.Home) }
             RailItem(Icons.Filled.Search, "Search", current == Screen.Search) { onSelect(Screen.Search) }
             RailItem(Icons.Filled.LibraryMusic, "Library", current == Screen.Library) { onSelect(Screen.Library) }
+            RailItem(Icons.Filled.Download, "Downloads", current == Screen.Downloads) { onSelect(Screen.Downloads) }
+            RailItem(Icons.Filled.Folder, "Local", current == Screen.LocalMusic) { onSelect(Screen.LocalMusic) }
+            RailItem(Icons.Filled.BarChart, "Stats", current == Screen.Stats) { onSelect(Screen.Stats) }
+            Spacer(modifier = Modifier.weight(1f))
+            RailItem(Icons.Filled.Settings, "Settings", current == Screen.Settings) { onSelect(Screen.Settings) }
         }
     }
 }
@@ -48,7 +58,7 @@ private fun RailItem(icon: ImageVector, label: String, selected: Boolean, onClic
     val color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     Column(
         modifier = Modifier
-            .padding(vertical = 12.dp)
+            .padding(vertical = 6.dp)
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .padding(PaddingValues(horizontal = 12.dp, vertical = 8.dp)),

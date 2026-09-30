@@ -9,6 +9,8 @@ import com.example.musicsm.domain.model.Song
 import com.example.musicsm.domain.repository.LibraryRepository
 import com.example.musicsm.domain.source.MusicSource
 import com.example.musicsmd.nav.Screen
+import com.example.musicsmd.playback.OfflineSource
+import com.example.musicsmd.playback.PlaybackListener
 import com.example.musicsmd.playback.PlayerController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -63,6 +65,8 @@ class AppViewModel(
     private val musicSource: MusicSource,
     private val library: LibraryRepository,
     private val player: PlayerController,
+    private val offlineSource: OfflineSource = OfflineSource { null },
+    private val playbackListeners: List<PlaybackListener> = emptyList(),
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -72,8 +76,15 @@ class AppViewModel(
     private val _playback = MutableStateFlow(PlaybackUiState())
     val playback: StateFlow<PlaybackUiState> = _playback.asStateFlow()
 
+    // Time actually played of the current song; seeks don't count, so stats reflect listening.
+    private var listenedMs = 0L
+    private var lastPositionMs = 0L
+
     init {
         player.onPositionChanged = { positionMs, durationMs ->
+            val delta = positionMs - lastPositionMs
+            if (delta in 1..MAX_TICK_MS) listenedMs += delta
+            lastPositionMs = positionMs
             _playback.update { it.copy(positionMs = positionMs, durationMs = durationMs) }
         }
         player.onEndReached = { playNextInQueue() }
@@ -214,9 +225,7 @@ class AppViewModel(
     /** Plays [song], replacing the queue with [queue] (defaults to just this song). */
     fun play(song: Song, queue: List<Song> = listOf(song)) = scope.launch {
         val index = queue.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
-        _playback.update { it.copy(currentSong = song, queue = queue, queueIndex = index, isPlaying = true) }
-        library.recordPlay(song)
-        resolveAndPlay(song)
+        startSong(song, queue, index)
     }
 
     fun togglePlayPause() {
@@ -224,7 +233,10 @@ class AppViewModel(
         _playback.update { it.copy(isPlaying = !it.isPlaying) }
     }
 
-    fun seekTo(positionMs: Long) = player.seekTo(positionMs)
+    fun seekTo(positionMs: Long) {
+        lastPositionMs = positionMs
+        player.seekTo(positionMs)
+    }
 
     fun setVolume(percent: Int) {
         val clamped = percent.coerceIn(0, 100)
@@ -236,44 +248,118 @@ class AppViewModel(
         val state = _playback.value
         val nextIndex = state.queueIndex + 1
         val next = state.queue.getOrNull(nextIndex) ?: return
-        scope.launch {
-            _playback.update { it.copy(currentSong = next, queueIndex = nextIndex, isPlaying = true) }
-            library.recordPlay(next)
-            resolveAndPlay(next)
-        }
+        scope.launch { startSong(next, state.queue, nextIndex) }
     }
 
     fun playPreviousInQueue() {
         val state = _playback.value
         val prevIndex = state.queueIndex - 1
         val prev = state.queue.getOrNull(prevIndex) ?: return
-        scope.launch {
-            _playback.update { it.copy(currentSong = prev, queueIndex = prevIndex, isPlaying = true) }
-            library.recordPlay(prev)
-            resolveAndPlay(prev)
-        }
+        scope.launch { startSong(prev, state.queue, prevIndex) }
     }
 
     fun playFromQueue(index: Int) {
-        val song = _playback.value.queue.getOrNull(index) ?: return
-        scope.launch {
-            _playback.update { it.copy(currentSong = song, queueIndex = index, isPlaying = true) }
-            library.recordPlay(song)
-            resolveAndPlay(song)
+        val state = _playback.value
+        val song = state.queue.getOrNull(index) ?: return
+        scope.launch { startSong(song, state.queue, index) }
+    }
+
+    // ---- Queue editing ----
+
+    /** Inserts [song] right after the current one (or plays it if nothing is playing). */
+    fun playNext(song: Song) {
+        val state = _playback.value
+        if (state.currentSong == null) {
+            play(song)
+            return
         }
+        _playback.update { s ->
+            val queue = s.queue.toMutableList().apply { add((s.queueIndex + 1).coerceIn(0, size), song) }
+            s.copy(queue = queue)
+        }
+    }
+
+    /** Appends [song] to the end of the queue (or plays it if nothing is playing). */
+    fun addToQueue(song: Song) {
+        if (_playback.value.currentSong == null) {
+            play(song)
+            return
+        }
+        _playback.update { s -> s.copy(queue = s.queue + song) }
+    }
+
+    fun removeFromQueue(index: Int) = _playback.update { s ->
+        if (index !in s.queue.indices || index == s.queueIndex) return@update s
+        val queue = s.queue.toMutableList().apply { removeAt(index) }
+        s.copy(queue = queue, queueIndex = if (index < s.queueIndex) s.queueIndex - 1 else s.queueIndex)
+    }
+
+    fun moveInQueue(from: Int, to: Int) = _playback.update { s ->
+        if (from !in s.queue.indices || to !in s.queue.indices || from == to) return@update s
+        val queue = s.queue.toMutableList().apply { add(to, removeAt(from)) }
+        val current = s.queueIndex
+        val newIndex = when {
+            from == current -> to
+            from < current && to >= current -> current - 1
+            from > current && to <= current -> current + 1
+            else -> current
+        }
+        s.copy(queue = queue, queueIndex = newIndex)
+    }
+
+    /** Plays [song] followed by YouTube Music's related tracks ("Start radio"). */
+    fun startRadio(song: Song) = scope.launch {
+        startSong(song, listOf(song), 0)
+        val related = runCatching { musicSource.relatedTo(song.id) }.getOrDefault(emptyList())
+            .filter { it.id != song.id }
+            .distinctBy { it.id }
+        _playback.update { s -> if (s.currentSong?.id == song.id) s.copy(queue = s.queue + related) else s }
     }
 
     fun setExpanded(expanded: Boolean) = _playback.update { it.copy(isExpanded = expanded) }
 
     fun setQueueVisible(visible: Boolean) = _playback.update { it.copy(isQueueVisible = visible) }
 
+    /** The single path every track change goes through, so listeners and stats see all of them. */
+    private suspend fun startSong(song: Song, queue: List<Song>, index: Int) {
+        finishCurrentSong()
+        _playback.update {
+            it.copy(
+                currentSong = song,
+                queue = queue,
+                queueIndex = index,
+                isPlaying = true,
+                positionMs = 0L,
+                durationMs = song.durationMs,
+            )
+        }
+        playbackListeners.forEach { runCatching { it.onSongStarted(song) } }
+        library.recordPlay(song)
+        resolveAndPlay(song)
+    }
+
+    private fun finishCurrentSong() {
+        val state = _playback.value
+        val current = state.currentSong ?: return
+        val listened = listenedMs
+        listenedMs = 0L
+        lastPositionMs = 0L
+        playbackListeners.forEach { runCatching { it.onSongFinished(current, listened, state.durationMs) } }
+    }
+
     private suspend fun resolveAndPlay(song: Song) {
-        runCatching { musicSource.resolveStream(song.id) }
+        runCatching { offlineSource.localStream(song.id) ?: musicSource.resolveStream(song.id) }
             .onSuccess { stream -> player.play(stream) }
             .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
     }
 
     fun dispose() {
+        finishCurrentSong()
         player.release()
+    }
+
+    private companion object {
+        /** Position ticks larger than this are seeks, not playback. */
+        const val MAX_TICK_MS = 3_000L
     }
 }
