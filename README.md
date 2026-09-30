@@ -158,8 +158,9 @@ side hasn't been trimmed or tested on a Mac yet. Options:
 Release:
 
 ```powershell
+git branch -M main
 git remote add origin https://github.com/workingpayload/MusicSM-Desktop.git
-git push -u origin master
+git push -u origin main
 git tag v1.0.0
 git push origin v1.0.0
 ```
