@@ -158,7 +158,7 @@ side hasn't been trimmed or tested on a Mac yet. Options:
 Release:
 
 ```powershell
-git remote add origin https://github.com/<you>/MusicSM-Desktop.git
+git remote add origin https://github.com/workingpayload/MusicSM-Desktop.git
 git push -u origin master
 git tag v1.0.0
 git push origin v1.0.0
@@ -167,6 +167,10 @@ git push origin v1.0.0
 The tag sets the version (`v1.2.3` → 1.2.3; `v1.2.3-beta` → 1.2.3, published as a pre-release).
 **Run workflow** on the Actions tab builds the installers without a Release (they're attached to
 the run as artifacts).
+
+The MusicSM download page (`web/` in the MusicSM repo) adds these installers' downloads to its
+GitHub total. It reads the public releases of `workingpayload/MusicSM-Desktop`, so keep the repo
+public under that name, or set `DESKTOP_GITHUB_REPO` on the Vercel project.
 
 The installers aren't code-signed, so Windows SmartScreen shows "Windows protected your PC" (More
 info → Run anyway), and macOS blocks the first launch (System Settings → Privacy & Security → Open
