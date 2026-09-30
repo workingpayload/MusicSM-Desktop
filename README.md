@@ -5,12 +5,21 @@ from YouTube Music (InnerTube) and audio via NewPipeExtractor. Built with **Kotl
 Multiplatform for Desktop** so the domain and data layers are shared verbatim with the mobile
 app; only the UI shell and playback engine are desktop-specific.
 
-## Status: MVP scaffold
+## Status: MVP+ (expanded)
 
-This is an initial, working scaffold covering the agreed MVP scope: search, home feed, and
-playback with a queue. Library, downloads, lyrics, import/export, settings, EQ and mix mode are
-not yet ported — see `docs/ROADMAP.md` (TODO) for the plan to reach full parity with the mobile
-app's `.codemap.md`.
+Covers the agreed MVP scope plus a fuller UI/feature pass:
+
+- Sidebar navigation (Home / Search / Library) with back-stack.
+- Home feed with album/artist card shelves and song rows.
+- Your Library: liked songs, local playlists (create + add tracks), recent plays — persisted to
+  `~/.musicsm-desktop/library.json` (JSON-file store, since Room isn't practical on plain JVM).
+- Album / Artist / Playlist detail screens with track lists and Play-all.
+- Mini player bar (artwork, like, expand, queue toggle) plus a full-screen Now Playing view
+  (seek, prev/play-pause/next, like, volume, queue toggle) and a slide-in queue panel.
+- Cover art via Coil3 (OkHttp network fetcher).
+
+Downloads, lyrics, import/export, settings, EQ and mix mode are still not ported — out of scope
+for now; see the mobile app's `.codemap.md` for the full feature set if parity is needed later.
 
 ## Modules
 

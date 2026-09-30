@@ -1,0 +1,155 @@
+package com.example.musicsmd.ui.detail
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.example.musicsm.domain.model.Album
+import com.example.musicsm.domain.model.Artist
+import com.example.musicsm.domain.model.Playlist
+import com.example.musicsm.domain.model.Song
+import com.example.musicsmd.ui.components.ArtworkImage
+import com.example.musicsmd.ui.components.SongRow
+
+/** Shared header + song-list layout for Album/Artist/Playlist detail screens. */
+@Composable
+private fun DetailScaffold(
+    title: String,
+    subtitle: String?,
+    artworkUrl: String?,
+    songs: List<Song>,
+    isLiked: (String) -> Boolean,
+    onBack: () -> Unit,
+    onSongClick: (Song, List<Song>) -> Unit,
+    onToggleLike: (Song) -> Unit,
+    isLoading: Boolean,
+) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (isLoading) {
+            CircularProgressIndicator(modifier = Modifier.padding(24.dp))
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ArtworkImage(url = artworkUrl, size = 160.dp)
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(title, style = MaterialTheme.typography.headlineSmall)
+                    if (subtitle != null) {
+                        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (songs.isNotEmpty()) {
+                        Button(onClick = { onSongClick(songs.first(), songs) }) {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Play")
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+                itemsIndexed(songs) { index, song ->
+                    SongRow(
+                        song = song,
+                        onClick = { onSongClick(song, songs) },
+                        isLiked = isLiked(song.id),
+                        onToggleLike = { onToggleLike(song) },
+                        trailingIndex = index + 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AlbumDetailScreen(
+    album: Album?,
+    isLoading: Boolean,
+    isLiked: (String) -> Boolean,
+    onBack: () -> Unit,
+    onSongClick: (Song, List<Song>) -> Unit,
+    onToggleLike: (Song) -> Unit,
+) {
+    DetailScaffold(
+        title = album?.title ?: "",
+        subtitle = album?.let { "${it.artist}${it.year?.let { y -> " · $y" } ?: ""}" },
+        artworkUrl = album?.artworkUrl,
+        songs = album?.songs ?: emptyList(),
+        isLiked = isLiked,
+        onBack = onBack,
+        onSongClick = onSongClick,
+        onToggleLike = onToggleLike,
+        isLoading = isLoading,
+    )
+}
+
+@Composable
+fun ArtistDetailScreen(
+    artist: Artist?,
+    isLoading: Boolean,
+    isLiked: (String) -> Boolean,
+    onBack: () -> Unit,
+    onSongClick: (Song, List<Song>) -> Unit,
+    onToggleLike: (Song) -> Unit,
+) {
+    DetailScaffold(
+        title = artist?.name ?: "",
+        subtitle = artist?.subscribers,
+        artworkUrl = artist?.artworkUrl,
+        songs = artist?.topSongs ?: emptyList(),
+        isLiked = isLiked,
+        onBack = onBack,
+        onSongClick = onSongClick,
+        onToggleLike = onToggleLike,
+        isLoading = isLoading,
+    )
+}
+
+@Composable
+fun PlaylistDetailScreen(
+    playlist: Playlist?,
+    isLoading: Boolean,
+    isLiked: (String) -> Boolean,
+    onBack: () -> Unit,
+    onSongClick: (Song, List<Song>) -> Unit,
+    onToggleLike: (Song) -> Unit,
+) {
+    DetailScaffold(
+        title = playlist?.name ?: "",
+        subtitle = playlist?.let { "${it.songs.size} songs" },
+        artworkUrl = playlist?.artworkUrl,
+        songs = playlist?.songs ?: emptyList(),
+        isLiked = isLiked,
+        onBack = onBack,
+        onSongClick = onSongClick,
+        onToggleLike = onToggleLike,
+        isLoading = isLoading,
+    )
+}

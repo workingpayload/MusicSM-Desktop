@@ -1,5 +1,6 @@
 package com.example.musicsmd.player
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,8 +8,11 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
@@ -22,9 +26,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import java.util.concurrent.TimeUnit
+import com.example.musicsmd.ui.components.ArtworkImage
 
-/** Bottom playback bar — desktop counterpart of the mobile app's mini player. */
+/** Bottom playback bar — desktop counterpart of the mobile app's mini player. Click anywhere
+ * (except the buttons) to expand into [NowPlayingScreen]. */
 @Composable
 fun PlayerBar(
     state: PlaybackUiState,
@@ -32,17 +37,29 @@ fun PlayerBar(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onSeek: (Long) -> Unit,
+    onExpand: () -> Unit,
+    onToggleLike: () -> Unit,
+    onToggleQueue: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val song = state.currentSong ?: return
     Surface(modifier = modifier.fillMaxWidth(), tonalElevation = 4.dp) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
+                ArtworkImage(url = song.artworkUrl, size = 48.dp)
+                Column(modifier = Modifier.weight(1f).clickable(onClick = onExpand).padding(start = 12.dp)) {
                     Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
                     Text(song.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
                 }
+                IconButton(onClick = onToggleLike) {
+                    Icon(
+                        if (state.isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = "Like",
+                        tint = if (state.isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Controls(state = state, onTogglePlayPause = onTogglePlayPause, onNext = onNext, onPrevious = onPrevious)
+                IconButton(onClick = onToggleQueue) { Icon(Icons.Filled.QueueMusic, contentDescription = "Queue") }
             }
             Slider(
                 value = state.positionMs.toFloat(),
@@ -69,11 +86,4 @@ private fun RowScope.Controls(
         Icon(if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = "Play/Pause")
     }
     IconButton(onClick = onNext) { Icon(Icons.Filled.SkipNext, contentDescription = "Next") }
-}
-
-private fun formatMs(ms: Long): String {
-    val totalSeconds = TimeUnit.MILLISECONDS.toSeconds(ms.coerceAtLeast(0))
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return "%d:%02d".format(minutes, seconds)
 }

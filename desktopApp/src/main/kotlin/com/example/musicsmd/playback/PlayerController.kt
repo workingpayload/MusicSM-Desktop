@@ -46,6 +46,10 @@ class PlayerController {
 
     fun seekTo(positionMs: Long) = mediaPlayer.controls().setTime(positionMs)
 
+    fun setVolume(percent: Int) {
+        mediaPlayer.audio().setVolume(percent.coerceIn(0, 100))
+    }
+
     fun stop() = mediaPlayer.controls().stop()
 
     fun release() = audioComponent.release()
