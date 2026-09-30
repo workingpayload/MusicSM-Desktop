@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -45,7 +46,6 @@ data class PlaybackUiState(
     val isPlaying: Boolean = false,
     /** A track switch is in flight: the stream is being looked up or libVLC hasn't produced audio yet. */
     val isBuffering: Boolean = false,
-    val positionMs: Long = 0L,
     val durationMs: Long = 0L,
     val queue: List<Song> = emptyList(),
     val queueIndex: Int = -1,
@@ -105,6 +105,11 @@ class AppViewModel(
     private val _playback = MutableStateFlow(PlaybackUiState())
     val playback: StateFlow<PlaybackUiState> = _playback.asStateFlow()
 
+    // Kept apart from [playback], as mobile's PlayerViewModel does: it ticks several times a second,
+    // and only the seek bar and lyrics need it, not every screen that reads the playback state.
+    private val _position = MutableStateFlow(0L)
+    val position: StateFlow<Long> = _position.asStateFlow()
+
     private val sleepTimerManager = SleepTimerManager(
         scope = scope,
         fadeOutEnabled = { settingsStore.current.sleepTimerFadeOut },
@@ -156,7 +161,10 @@ class AppViewModel(
                 val delta = positionMs - lastPositionMs
                 if (delta in 1..MAX_TICK_MS) listenedMs += delta
                 lastPositionMs = positionMs
-                _playback.update { it.copy(positionMs = positionMs, durationMs = durationMs) }
+                _position.value = positionMs
+                if (durationMs > 0L && durationMs != _playback.value.durationMs) {
+                    _playback.update { it.copy(durationMs = durationMs) }
+                }
             }
         }
         player.onEndReached = { if (loadedSongId != null) onTrackEnded() }
@@ -223,11 +231,13 @@ class AppViewModel(
     @OptIn(FlowPreview::class)
     private fun observeQueuePersistence() {
         scope.launch {
-            _playback.debounce(1_000L).collect { state ->
-                if (!settingsStore.current.restoreQueue) return@collect
-                if (state.currentSong == null || state.queue.isEmpty()) return@collect
-                queuePersistence.save(state.queue, originalQueue.ifEmpty { state.queue }, state.queueIndex, state.positionMs)
-            }
+            combine(_playback, _position) { state, positionMs -> state to positionMs }
+                .debounce(1_000L)
+                .collect { (state, positionMs) ->
+                    if (!settingsStore.current.restoreQueue) return@collect
+                    if (state.currentSong == null || state.queue.isEmpty()) return@collect
+                    queuePersistence.save(state.queue, originalQueue.ifEmpty { state.queue }, state.queueIndex, positionMs)
+                }
         }
     }
 
@@ -241,11 +251,11 @@ class AppViewModel(
                 currentSong = current,
                 queue = saved.queue,
                 queueIndex = saved.index,
-                positionMs = saved.positionMs,
                 durationMs = current.durationMs,
                 isPlaying = false,
             )
         }
+        _position.value = saved.positionMs
         prefetchStream(current.id)
     }
 
@@ -419,7 +429,7 @@ class AppViewModel(
             return
         }
         if (loadedSongId != song.id) {
-            val resumePosition = state.positionMs.takeUnless { state.durationMs > 0L && it >= state.durationMs - 1_000L } ?: 0L
+            val resumePosition = _position.value.takeUnless { state.durationMs > 0L && it >= state.durationMs - 1_000L } ?: 0L
             scope.launch { startSong(song, state.queue, state.queueIndex.coerceAtLeast(0), startPositionMs = resumePosition) }
         } else {
             player.resume()
@@ -438,7 +448,7 @@ class AppViewModel(
         if (loadedSongId == _playback.value.currentSong?.id) {
             player.seekTo(clamped)
         }
-        _playback.update { it.copy(positionMs = clamped) }
+        _position.value = clamped
     }
 
     fun setVolume(percent: Int) {
@@ -484,7 +494,7 @@ class AppViewModel(
 
     fun playPreviousInQueue() {
         val state = _playback.value
-        if (state.positionMs > RESTART_PREVIOUS_MS) {
+        if (_position.value > RESTART_PREVIOUS_MS) {
             seekTo(0L)
             return
         }
@@ -593,13 +603,13 @@ class AppViewModel(
         loadedSongId = null
         finishCurrentSong()
         val safeIndex = index.coerceIn(queue.indices)
+        _position.value = startPositionMs
         _playback.update {
             it.copy(
                 currentSong = song,
                 queue = queue,
                 queueIndex = safeIndex,
                 isPlaying = true,
-                positionMs = startPositionMs,
                 durationMs = song.durationMs,
             )
         }
@@ -636,7 +646,7 @@ class AppViewModel(
                     player.play(
                         stream = stream,
                         rate = state.playbackSpeed,
-                        startPositionMs = state.positionMs,
+                        startPositionMs = _position.value,
                         outputDeviceId = state.audioOutputDevice,
                         paused = !state.isPlaying,
                     )
@@ -685,7 +695,7 @@ class AppViewModel(
             if (sleepTimerManager.shouldStopAtEndOfTrack()) {
                 sleepTimerManager.finishEndOfTrack()
                 finishCurrentSong()
-                _playback.update { it.copy(isPlaying = false, positionMs = it.durationMs) }
+                stopAtEnd()
                 return@launch
             }
             when {
@@ -698,10 +708,15 @@ class AppViewModel(
                 settingsStore.current.autoplayRadio && !current.id.startsWith(LOCAL_ID_PREFIX) -> autoplayRadioAfter(current, state)
                 else -> {
                     finishCurrentSong()
-                    _playback.update { it.copy(isPlaying = false, positionMs = it.durationMs) }
+                    stopAtEnd()
                 }
             }
         }
+    }
+
+    private fun stopAtEnd() {
+        _playback.update { it.copy(isPlaying = false) }
+        _position.value = _playback.value.durationMs
     }
 
     private suspend fun autoplayRadioAfter(lastSong: Song, state: PlaybackUiState) {
@@ -711,7 +726,7 @@ class AppViewModel(
             .distinctBy { it.id }
         if (related.isEmpty()) {
             finishCurrentSong()
-            _playback.update { it.copy(isPlaying = false, positionMs = it.durationMs) }
+            stopAtEnd()
             return
         }
         val newQueue = state.queue + related
@@ -766,7 +781,7 @@ class AppViewModel(
     fun dispose() {
         if (settingsStore.current.restoreQueue) {
             val state = _playback.value
-            queuePersistence.save(state.queue, originalQueue.ifEmpty { state.queue }, state.queueIndex, state.positionMs)
+            queuePersistence.save(state.queue, originalQueue.ifEmpty { state.queue }, state.queueIndex, _position.value)
         }
         sleepTimerManager.cancel()
         finishCurrentSong()

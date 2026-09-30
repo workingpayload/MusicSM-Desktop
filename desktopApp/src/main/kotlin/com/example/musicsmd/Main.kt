@@ -1,6 +1,21 @@
 package com.example.musicsmd
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -16,20 +31,25 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
@@ -50,6 +70,7 @@ import com.example.musicsmd.local.LocalMusicScreen
 import com.example.musicsmd.lyrics.LyricsController
 import com.example.musicsmd.nav.Screen
 import com.example.musicsmd.nav.TopLevelScreens
+import com.example.musicsmd.player.AppUiState
 import com.example.musicsmd.player.AppViewModel
 import com.example.musicsmd.player.LocalSongActions
 import com.example.musicsmd.player.NowPlayingScreen
@@ -94,6 +115,35 @@ private val SCRIM_OVERHANG = 56.dp
 /** Mobile's landscape cap is 520 dp; desktop's pill carries more buttons, so it gets more room. */
 private val MINI_PLAYER_MAX_WIDTH = 820.dp
 
+/** Mobile's NavHost push/pop duration. */
+private const val NAV_TRANSITION_MS = 300
+
+/** Mobile's player sheet spring. */
+private val SheetSpring = spring<Float>(
+    dampingRatio = Spring.DampingRatioLowBouncy,
+    stiffness = Spring.StiffnessMediumLow,
+)
+
+/** One step of navigation; [state] is what that screen was showing, frozen while it animates out. */
+private data class NavEntry(val screen: Screen, val backStack: List<Screen>, val state: AppUiState)
+
+/**
+ * Mobile's NavHost transitions: a pushed screen slides in from the right, going back slides the
+ * other way. Switching tabs from the dock is not a push, so it cross-fades instead.
+ */
+private fun AnimatedContentTransitionScope<NavEntry>.navTransition(from: NavEntry, to: NavEntry): ContentTransform {
+    val push = to.backStack.size > from.backStack.size && to.backStack.lastOrNull() == from.screen
+    val pop = to.backStack.size < from.backStack.size && from.backStack.lastOrNull() == to.screen
+    val slide = tween<IntOffset>(NAV_TRANSITION_MS)
+    val transform = when {
+        push -> slideInHorizontally(slide) { it } togetherWith slideOutHorizontally(slide) { -it }
+        pop -> slideInHorizontally(slide) { -it } togetherWith slideOutHorizontally(slide) { it }
+        else -> fadeIn(tween(220, delayMillis = 60)) togetherWith fadeOut(tween(120))
+    }
+    // Unclipped, so tinted screens still paint under the glass dock (see LocalDockInset).
+    return transform using SizeTransform(clip = false)
+}
+
 @Composable
 fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
     val uiState by viewModel.uiState.collectAsState()
@@ -104,6 +154,18 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
     val settings by AppGraph.settingsStore.settings.collectAsState()
     val downloadedSongs by AppGraph.downloadManager.downloads().collectAsState(initial = emptyList())
     val coroutineScope = rememberCoroutineScope()
+    // Per-screen saved state (scroll positions), so going back lands where you left, as on mobile.
+    val saveableStates = rememberSaveableStateHolder()
+    val savedScreenKeys = remember { mutableSetOf<String>() }
+    LaunchedEffect(uiState.screen, uiState.backStack) {
+        savedScreenKeys += uiState.screen.toString()
+        // Tabs keep theirs; a popped detail page starts from the top if it is opened again.
+        val live = (TopLevelScreens + uiState.backStack + uiState.screen).mapTo(HashSet()) { it.toString() }
+        savedScreenKeys.filter { it !in live }.forEach { key ->
+            saveableStates.removeState(key)
+            savedScreenKeys -= key
+        }
+    }
     var toastMessage by remember { mutableStateOf<String?>(null) }
     var sharePlaylist by remember { mutableStateOf<Playlist?>(null) }
 
@@ -168,6 +230,13 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
         val hasSong = playback.currentSong != null
         val bottomInset = if (hasSong) barHeight else 0.dp
 
+        // 0 = collapsed into the mini player, 1 = Now Playing fully up.
+        val sheet = remember { Animatable(0f) }
+        val sheetOpen = playback.isExpanded && hasSong
+        LaunchedEffect(sheetOpen) { sheet.animateTo(if (sheetOpen) 1f else 0f, SheetSpring) }
+        // Derived, so the root recomposes when the sheet appears or goes, not on every frame.
+        val sheetShown by remember { derivedStateOf { sheet.value > 0.001f } }
+
         CompositionLocalProvider(
             LocalHazeState provides hazeState,
             LocalSongActions provides songActions,
@@ -194,136 +263,152 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
                 ) {
                     Row(modifier = Modifier.fillMaxSize()) {
                         Box(modifier = Modifier.weight(1f)) {
-                            when (val screen = uiState.screen) {
-                                Screen.Home -> HomeScreen(
-                                    state = uiState,
-                                    isLiked = ::isLiked,
-                                    onSongClick = ::playSong,
-                                    onToggleLike = viewModel::toggleLike,
-                                    onAlbumClick = { viewModel.navigateTo(Screen.AlbumDetail(it.id)) },
-                                    onArtistClick = { viewModel.navigateTo(Screen.ArtistDetail(it.id)) },
-                                    onPlaylistClick = { viewModel.navigateTo(Screen.PlaylistDetail(it.id)) },
-                                    onLoadMoreHome = viewModel::loadMoreHome,
-                                    onRetryHome = { viewModel.loadHome() },
-                                )
-                                Screen.Search -> SearchScreen(
-                                    state = uiState,
-                                    settings = settings,
-                                    historyStore = AppGraph.searchHistoryStore,
-                                    isLiked = ::isLiked,
-                                    onQueryChange = viewModel::onQueryChange,
-                                    onSearch = viewModel::search,
-                                    onSongClick = ::playSong,
-                                    onToggleLike = viewModel::toggleLike,
-                                    onAlbumClick = { viewModel.navigateTo(Screen.AlbumDetail(it.id)) },
-                                    onArtistClick = { viewModel.navigateTo(Screen.ArtistDetail(it.id)) },
-                                    onPlaylistClick = { viewModel.navigateTo(Screen.PlaylistDetail(it.id)) },
-                                )
-                                Screen.Library -> LibraryScreen(
-                                    likedSongs = uiState.likedSongs,
-                                    playlists = uiState.playlists,
-                                    isLiked = ::isLiked,
-                                    onSongClick = ::playSong,
-                                    onToggleLike = viewModel::toggleLike,
-                                    onPlaylistClick = { viewModel.navigateTo(Screen.PlaylistDetail(it.id)) },
-                                    onCreatePlaylist = viewModel::createPlaylist,
-                                    onImportClick = { viewModel.navigateTo(Screen.Import) },
-                                    onOpenSharedPlaylist = { viewModel.navigateTo(Screen.SharedPlaylist(it)) },
-                                    onSharePlaylist = { sharePlaylist = it },
-                                )
-                                is Screen.AlbumDetail -> AlbumDetailScreen(
-                                    album = uiState.albumDetail,
-                                    isLoading = uiState.isLoadingDetail,
-                                    isLiked = ::isLiked,
-                                    onBack = viewModel::navigateBack,
-                                    onSongClick = ::playSong,
-                                    onToggleLike = viewModel::toggleLike,
-                                    onDownloadAll = { songs ->
-                                        coroutineScope.launch {
-                                            AppGraph.downloadManager.downloadAll(songs)
-                                            toastMessage = "Downloading ${songs.size} songs"
-                                        }
-                                    },
-                                )
-                                is Screen.ArtistDetail -> ArtistDetailScreen(
-                                    artist = uiState.artistDetail,
-                                    isLoading = uiState.isLoadingDetail,
-                                    isLiked = ::isLiked,
-                                    onBack = viewModel::navigateBack,
-                                    onSongClick = ::playSong,
-                                    onToggleLike = viewModel::toggleLike,
-                                    onDownloadAll = { songs ->
-                                        coroutineScope.launch {
-                                            AppGraph.downloadManager.downloadAll(songs)
-                                            toastMessage = "Downloading ${songs.size} songs"
-                                        }
-                                    },
-                                )
-                                is Screen.PlaylistDetail -> PlaylistDetailScreen(
-                                    playlist = uiState.playlistDetail,
-                                    isLoading = uiState.isLoadingDetail,
-                                    isLiked = ::isLiked,
-                                    onBack = viewModel::navigateBack,
-                                    onSongClick = ::playSong,
-                                    onToggleLike = viewModel::toggleLike,
-                                    onDownloadAll = { songs ->
-                                        coroutineScope.launch {
-                                            AppGraph.downloadManager.downloadAll(songs)
-                                            toastMessage = "Downloading ${songs.size} songs"
-                                        }
-                                    },
-                                    onSharePlaylist = { sharePlaylist = it },
-                                )
-                                Screen.Downloads -> DownloadsScreen(
-                                    manager = AppGraph.downloadManager,
-                                    settingsStore = AppGraph.settingsStore,
-                                    onSongClick = ::playSong,
-                                )
-                                Screen.LocalMusic -> LocalMusicScreen(
-                                    manager = AppGraph.localMusicManager,
-                                    settingsStore = AppGraph.settingsStore,
-                                    onSongClick = ::playSong,
-                                )
-                                Screen.Stats -> StatsScreen(
-                                    repository = AppGraph.statsRepository,
-                                    isLiked = ::isLiked,
-                                    onToggleLike = viewModel::toggleLike,
-                                    onPlaySongs = { songs, index -> songs.getOrNull(index)?.let { viewModel.play(it, songs) } },
-                                    onArtistSearch = { artist ->
-                                        viewModel.selectTab(Screen.Search)
-                                        viewModel.onQueryChange(artist)
-                                        viewModel.search(settings.searchVideos)
-                                    },
-                                )
-                                Screen.Settings -> SettingsScreen(
-                                    settings = settings,
-                                    onUpdate = AppGraph.settingsStore::update,
-                                    onOpenEqualizer = { viewModel.navigateTo(Screen.Equalizer) },
-                                    onClearListeningHistory = { AppGraph.statsRepository.clear() },
-                                    onClearSearchHistory = AppGraph.searchHistoryStore::clear,
-                                )
-                                Screen.Equalizer -> EqualizerScreen(
-                                    settingsStore = AppGraph.settingsStore,
-                                    player = AppGraph.playerController,
-                                    onBack = viewModel::navigateBack,
-                                )
-                                Screen.Import -> ImportScreen(
-                                    repository = AppGraph.playlistImportRepository,
-                                    libraryRepository = AppGraph.libraryRepository,
-                                    onBack = viewModel::navigateBack,
-                                    onOpenPlaylist = { viewModel.navigateTo(Screen.PlaylistDetail(it.toString())) },
-                                )
-                                is Screen.SharedPlaylist -> SharedPlaylistScreen(
-                                    payload = screen.payload,
-                                    libraryRepository = AppGraph.libraryRepository,
-                                    onBack = viewModel::navigateBack,
-                                    onPlay = ::playSong,
-                                    onOpenPlaylist = { viewModel.navigateTo(Screen.PlaylistDetail(it.toString())) },
-                                )
+                            AnimatedContent(
+                                targetState = NavEntry(uiState.screen, uiState.backStack, uiState),
+                                contentKey = { it.screen },
+                                transitionSpec = { navTransition(initialState, targetState) },
+                                label = "screen",
+                            ) { entry ->
+                                // The outgoing screen keeps the state it had, so it doesn't flash the
+                                // incoming screen's data (or its loading spinner) as it slides away.
+                                val navState = entry.state
+                                saveableStates.SaveableStateProvider(entry.screen.toString()) {
+                                    when (val screen = entry.screen) {
+                                        Screen.Home -> HomeScreen(
+                                            state = navState,
+                                            isLiked = ::isLiked,
+                                            onSongClick = ::playSong,
+                                            onToggleLike = viewModel::toggleLike,
+                                            onAlbumClick = { viewModel.navigateTo(Screen.AlbumDetail(it.id)) },
+                                            onArtistClick = { viewModel.navigateTo(Screen.ArtistDetail(it.id)) },
+                                            onPlaylistClick = { viewModel.navigateTo(Screen.PlaylistDetail(it.id)) },
+                                            onLoadMoreHome = viewModel::loadMoreHome,
+                                            onRetryHome = { viewModel.loadHome() },
+                                        )
+                                        Screen.Search -> SearchScreen(
+                                            state = navState,
+                                            settings = settings,
+                                            historyStore = AppGraph.searchHistoryStore,
+                                            isLiked = ::isLiked,
+                                            onQueryChange = viewModel::onQueryChange,
+                                            onSearch = viewModel::search,
+                                            onSongClick = ::playSong,
+                                            onToggleLike = viewModel::toggleLike,
+                                            onAlbumClick = { viewModel.navigateTo(Screen.AlbumDetail(it.id)) },
+                                            onArtistClick = { viewModel.navigateTo(Screen.ArtistDetail(it.id)) },
+                                            onPlaylistClick = { viewModel.navigateTo(Screen.PlaylistDetail(it.id)) },
+                                        )
+                                        Screen.Library -> LibraryScreen(
+                                            likedSongs = navState.likedSongs,
+                                            playlists = navState.playlists,
+                                            isLiked = ::isLiked,
+                                            onSongClick = ::playSong,
+                                            onToggleLike = viewModel::toggleLike,
+                                            onPlaylistClick = { viewModel.navigateTo(Screen.PlaylistDetail(it.id)) },
+                                            onCreatePlaylist = viewModel::createPlaylist,
+                                            onImportClick = { viewModel.navigateTo(Screen.Import) },
+                                            onOpenSharedPlaylist = { viewModel.navigateTo(Screen.SharedPlaylist(it)) },
+                                            onSharePlaylist = { sharePlaylist = it },
+                                        )
+                                        is Screen.AlbumDetail -> AlbumDetailScreen(
+                                            album = navState.albumDetail,
+                                            isLoading = navState.isLoadingDetail,
+                                            isLiked = ::isLiked,
+                                            onBack = viewModel::navigateBack,
+                                            onSongClick = ::playSong,
+                                            onToggleLike = viewModel::toggleLike,
+                                            onDownloadAll = { songs ->
+                                                coroutineScope.launch {
+                                                    AppGraph.downloadManager.downloadAll(songs)
+                                                    toastMessage = "Downloading ${songs.size} songs"
+                                                }
+                                            },
+                                        )
+                                        is Screen.ArtistDetail -> ArtistDetailScreen(
+                                            artist = navState.artistDetail,
+                                            isLoading = navState.isLoadingDetail,
+                                            isLiked = ::isLiked,
+                                            onBack = viewModel::navigateBack,
+                                            onSongClick = ::playSong,
+                                            onToggleLike = viewModel::toggleLike,
+                                            onDownloadAll = { songs ->
+                                                coroutineScope.launch {
+                                                    AppGraph.downloadManager.downloadAll(songs)
+                                                    toastMessage = "Downloading ${songs.size} songs"
+                                                }
+                                            },
+                                        )
+                                        is Screen.PlaylistDetail -> PlaylistDetailScreen(
+                                            playlist = navState.playlistDetail,
+                                            isLoading = navState.isLoadingDetail,
+                                            isLiked = ::isLiked,
+                                            onBack = viewModel::navigateBack,
+                                            onSongClick = ::playSong,
+                                            onToggleLike = viewModel::toggleLike,
+                                            onDownloadAll = { songs ->
+                                                coroutineScope.launch {
+                                                    AppGraph.downloadManager.downloadAll(songs)
+                                                    toastMessage = "Downloading ${songs.size} songs"
+                                                }
+                                            },
+                                            onSharePlaylist = { sharePlaylist = it },
+                                        )
+                                        Screen.Downloads -> DownloadsScreen(
+                                            manager = AppGraph.downloadManager,
+                                            settingsStore = AppGraph.settingsStore,
+                                            onSongClick = ::playSong,
+                                        )
+                                        Screen.LocalMusic -> LocalMusicScreen(
+                                            manager = AppGraph.localMusicManager,
+                                            settingsStore = AppGraph.settingsStore,
+                                            onSongClick = ::playSong,
+                                        )
+                                        Screen.Stats -> StatsScreen(
+                                            repository = AppGraph.statsRepository,
+                                            isLiked = ::isLiked,
+                                            onToggleLike = viewModel::toggleLike,
+                                            onPlaySongs = { songs, index -> songs.getOrNull(index)?.let { viewModel.play(it, songs) } },
+                                            onArtistSearch = { artist ->
+                                                viewModel.selectTab(Screen.Search)
+                                                viewModel.onQueryChange(artist)
+                                                viewModel.search(settings.searchVideos)
+                                            },
+                                        )
+                                        Screen.Settings -> SettingsScreen(
+                                            settings = settings,
+                                            onUpdate = AppGraph.settingsStore::update,
+                                            onOpenEqualizer = { viewModel.navigateTo(Screen.Equalizer) },
+                                            onClearListeningHistory = { AppGraph.statsRepository.clear() },
+                                            onClearSearchHistory = AppGraph.searchHistoryStore::clear,
+                                        )
+                                        Screen.Equalizer -> EqualizerScreen(
+                                            settingsStore = AppGraph.settingsStore,
+                                            player = AppGraph.playerController,
+                                            onBack = viewModel::navigateBack,
+                                        )
+                                        Screen.Import -> ImportScreen(
+                                            repository = AppGraph.playlistImportRepository,
+                                            libraryRepository = AppGraph.libraryRepository,
+                                            onBack = viewModel::navigateBack,
+                                            onOpenPlaylist = { viewModel.navigateTo(Screen.PlaylistDetail(it.toString())) },
+                                        )
+                                        is Screen.SharedPlaylist -> SharedPlaylistScreen(
+                                            payload = screen.payload,
+                                            libraryRepository = AppGraph.libraryRepository,
+                                            onBack = viewModel::navigateBack,
+                                            onPlay = ::playSong,
+                                            onOpenPlaylist = { viewModel.navigateTo(Screen.PlaylistDetail(it.toString())) },
+                                        )
+                                    }
+                                }
                             }
                         }
 
-                        if (playback.isQueueVisible) {
+                        AnimatedVisibility(
+                            visible = playback.isQueueVisible,
+                            enter = slideInHorizontally(tween(NAV_TRANSITION_MS)) { it } + fadeIn(tween(NAV_TRANSITION_MS)),
+                            exit = slideOutHorizontally(tween(NAV_TRANSITION_MS)) { it } + fadeOut(tween(NAV_TRANSITION_MS)),
+                        ) {
                             QueuePanel(
                                 state = playback,
                                 onClose = { viewModel.setQueueVisible(false) },
@@ -371,7 +456,9 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
                                 .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
                                 .padding(start = dockSpace)
-                                .onSizeChanged { barHeight = with(density) { it.height.toDp() } },
+                                .onSizeChanged { barHeight = with(density) { it.height.toDp() } }
+                                // Fades out as the player sheet rises over it, as on mobile.
+                                .graphicsLayer { alpha = (1f - sheet.value * 1.5f).coerceIn(0f, 1f) },
                             contentAlignment = Alignment.BottomCenter,
                         ) {
                             PlayerBar(
@@ -404,7 +491,8 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
                         contentAlignment = Alignment.Center,
                     ) {
                         SideDock(
-                            current = tabOf(uiState.screen),
+                            // A pushed page keeps the tab it was opened from, as on mobile.
+                            current = tabOf(uiState.backStack.firstOrNull() ?: uiState.screen),
                             onSelect = { viewModel.selectTab(it) },
                         )
                     }
@@ -421,42 +509,56 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
                 }
 
                 // Full-screen player — composed over everything, so the screen behind keeps its
-                // state (scroll position, search results) while the player is open.
-                if (playback.isExpanded && hasSong) {
-                    NowPlayingScreen(
-                        state = playback,
-                        onCollapse = { viewModel.setExpanded(false) },
-                        onTogglePlayPause = viewModel::togglePlayPause,
-                        onNext = viewModel::playNextInQueue,
-                        onPrevious = viewModel::playPreviousInQueue,
-                        onSeek = viewModel::seekTo,
-                        onToggleLike = viewModel::toggleLikeCurrent,
-                        onVolumeChange = viewModel::setVolume,
-                        onToggleQueue = {
-                            viewModel.setExpanded(false)
-                            viewModel.setQueueVisible(true)
-                        },
-                        onToggleShuffle = viewModel::toggleShuffle,
-                        onCycleRepeat = viewModel::cycleRepeat,
-                        onPlaybackSpeedChange = viewModel::setPlaybackSpeed,
-                        onStartSleepTimer = viewModel::startSleepTimer,
-                        onStartSleepTimerAtEndOfTrack = viewModel::startSleepTimerAtEndOfTrack,
-                        onCancelSleepTimer = viewModel::cancelSleepTimer,
-                        onRefreshAudioOutputs = viewModel::refreshAudioOutputs,
-                        onSelectAudioOutput = viewModel::selectAudioOutput,
-                        onOpenEqualizer = {
-                            viewModel.setExpanded(false)
-                            viewModel.navigateTo(Screen.Equalizer)
-                        },
-                        showLyrics = lyricsVisible,
-                        lyricsState = lyricsState,
-                        lyricsOffsetMs = lyricsOffsetMs,
-                        onToggleLyrics = lyricsController::toggleVisible,
-                        onCloseLyrics = { lyricsController.setVisible(false) },
-                        onAdjustLyricsOffset = lyricsController::adjustOffset,
-                        onSetLyricsOffset = lyricsController::setOffset,
-                        onResetLyricsOffset = lyricsController::resetOffset,
-                    )
+                // state (scroll position, search results) while the player is open. Slides up from
+                // the mini player and back down, as mobile's sheet does; the offset is read in the
+                // layer, so the animation never recomposes the player.
+                if (hasSong && (sheetOpen || sheetShown)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                // Clamped: the spring's overshoot must not lift the sheet off the bottom edge.
+                                translationY = ((1f - sheet.value) * size.height).coerceAtLeast(0f)
+                            }
+                            // Taps on the player's empty areas must not fall through to the screen behind.
+                            .pointerInput(Unit) { detectTapGestures {} },
+                    ) {
+                        NowPlayingScreen(
+                            state = playback,
+                            position = viewModel.position,
+                            onCollapse = { viewModel.setExpanded(false) },
+                            onTogglePlayPause = viewModel::togglePlayPause,
+                            onNext = viewModel::playNextInQueue,
+                            onPrevious = viewModel::playPreviousInQueue,
+                            onSeek = viewModel::seekTo,
+                            onToggleLike = viewModel::toggleLikeCurrent,
+                            onVolumeChange = viewModel::setVolume,
+                            onToggleQueue = {
+                                viewModel.setExpanded(false)
+                                viewModel.setQueueVisible(true)
+                            },
+                            onToggleShuffle = viewModel::toggleShuffle,
+                            onCycleRepeat = viewModel::cycleRepeat,
+                            onPlaybackSpeedChange = viewModel::setPlaybackSpeed,
+                            onStartSleepTimer = viewModel::startSleepTimer,
+                            onStartSleepTimerAtEndOfTrack = viewModel::startSleepTimerAtEndOfTrack,
+                            onCancelSleepTimer = viewModel::cancelSleepTimer,
+                            onRefreshAudioOutputs = viewModel::refreshAudioOutputs,
+                            onSelectAudioOutput = viewModel::selectAudioOutput,
+                            onOpenEqualizer = {
+                                viewModel.setExpanded(false)
+                                viewModel.navigateTo(Screen.Equalizer)
+                            },
+                            showLyrics = lyricsVisible,
+                            lyricsState = lyricsState,
+                            lyricsOffsetMs = lyricsOffsetMs,
+                            onToggleLyrics = lyricsController::toggleVisible,
+                            onCloseLyrics = { lyricsController.setVisible(false) },
+                            onAdjustLyricsOffset = lyricsController::adjustOffset,
+                            onSetLyricsOffset = lyricsController::setOffset,
+                            onResetLyricsOffset = lyricsController::resetOffset,
+                        )
+                    }
                 }
             }
         }

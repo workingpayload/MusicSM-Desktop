@@ -54,6 +54,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -97,7 +98,7 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
 ) {
     val history by historyStore.history.collectAsState()
-    var filter by remember { mutableStateOf(SearchFilter.ALL) }
+    var filter by rememberSaveable { mutableStateOf(SearchFilter.ALL) }
     val focusRequester = remember { FocusRequester() }
 
     fun submit(query: String = state.query) {

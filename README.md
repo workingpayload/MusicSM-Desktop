@@ -34,6 +34,12 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
   launch. As on mobile, the next track's stream URL is looked up ahead of time, so skipping starts
   almost at once; the old track stops the moment you switch, and the play button shows a spinner
   while a new track loads.
+- **Motion**: mobile's transitions — Now Playing slides up from the mini player on a spring (the
+  pill fades under it), pushed pages slide in from the right and back out the other way, dock tabs
+  cross-fade, and the queue panel slides in. Going back keeps a page's scroll position and filters.
+  The seek bar and word-synced lyrics are interpolated per frame between libVLC's position ticks
+  (`SmoothPosition.kt`), and playback position lives in its own flow, so the rest of the app doesn't
+  recompose several times a second while music plays.
 - **Synced lyrics**: the mobile lyrics stack (Apple Music, BiniLyrics, LyricsPlus, SimpMusic,
   LRCLIB, KuGou, Unison, YouTube Music) with word-by-word highlighting, click-to-seek and per-song
   sync offset, shown beside the artwork in Now Playing.

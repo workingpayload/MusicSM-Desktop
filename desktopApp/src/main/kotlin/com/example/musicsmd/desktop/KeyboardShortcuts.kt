@@ -27,10 +27,10 @@ fun handleMusicShortcut(event: KeyEvent, viewModel: AppViewModel, onEscape: () -
             viewModel.playPreviousInQueue(); true
         }
         event.isShiftPressed && event.key == Key.DirectionRight -> {
-            viewModel.seekTo(playback.positionMs + 10_000L); true
+            viewModel.seekTo(viewModel.position.value + 10_000L); true
         }
         event.isShiftPressed && event.key == Key.DirectionLeft -> {
-            viewModel.seekTo(playback.positionMs - 10_000L); true
+            viewModel.seekTo(viewModel.position.value - 10_000L); true
         }
         event.isCtrlPressed && event.key == Key.DirectionUp -> {
             viewModel.setVolume(playback.volume + 5); true

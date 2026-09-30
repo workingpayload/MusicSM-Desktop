@@ -55,6 +55,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,6 +83,9 @@ import com.example.musicsmd.playback.SleepTimerContent
 import com.example.musicsmd.playback.formatSleepRemaining
 import com.example.musicsmd.settings.RepeatMode
 import com.example.musicsmd.ui.components.AppleSeekBar
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import com.example.musicsmd.ui.components.ArtworkImage
 import com.example.musicsmd.ui.components.LiquidGlassSheet
 import com.example.musicsmd.ui.components.LocalHazeState
@@ -110,6 +114,7 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 @Composable
 fun NowPlayingScreen(
     state: PlaybackUiState,
+    position: StateFlow<Long>,
     onCollapse: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onNext: () -> Unit,
@@ -198,6 +203,7 @@ fun NowPlayingScreen(
                     Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
                         PlayerColumn(
                             state = state,
+                            position = position,
                             accent = readableAccent,
                             showLyrics = showLyrics,
                             onCollapse = onCollapse,
@@ -222,18 +228,20 @@ fun NowPlayingScreen(
                         )
                     }
                     if (showLyrics) {
-                        LyricsPanel(
-                            lyricsState = lyricsState,
-                            positionMs = state.positionMs,
-                            song = song,
-                            lyricsOffsetMs = lyricsOffsetMs,
-                            onSeekMs = onSeek,
-                            onClose = onCloseLyrics,
-                            onAdjustLyricsOffset = onAdjustLyricsOffset,
-                            onSetLyricsOffset = onSetLyricsOffset,
-                            onResetLyricsOffset = onResetLyricsOffset,
-                            modifier = Modifier.weight(0.9f).fillMaxHeight(),
-                        )
+                        SmoothPositionScope(position, state) { positionMs ->
+                            LyricsPanel(
+                                lyricsState = lyricsState,
+                                positionMs = positionMs,
+                                song = song,
+                                lyricsOffsetMs = lyricsOffsetMs,
+                                onSeekMs = onSeek,
+                                onClose = onCloseLyrics,
+                                onAdjustLyricsOffset = onAdjustLyricsOffset,
+                                onSetLyricsOffset = onSetLyricsOffset,
+                                onResetLyricsOffset = onResetLyricsOffset,
+                                modifier = Modifier.weight(0.9f).fillMaxHeight(),
+                            )
+                        }
                     }
                 }
             }
@@ -274,6 +282,7 @@ fun NowPlayingScreen(
 @Composable
 private fun PlayerColumn(
     state: PlaybackUiState,
+    position: StateFlow<Long>,
     accent: Color,
     showLyrics: Boolean,
     onCollapse: () -> Unit,
@@ -394,11 +403,12 @@ private fun PlayerColumn(
 
         Spacer(Modifier.height(12.dp))
 
-        AppleSeekBar(
-            progress = if (state.durationMs > 0) state.positionMs.toFloat() / state.durationMs else 0f,
+        SmoothSeekBar(
+            positionFlow = position,
+            isPlaying = state.isPlaying && !state.isBuffering,
             durationMs = state.durationMs,
             onSeek = { fraction -> onSeek((fraction * state.durationMs).toLong()) },
-            playing = state.isPlaying,
+            speed = state.playbackSpeed,
         )
 
         Spacer(Modifier.height(16.dp))
@@ -416,7 +426,11 @@ private fun PlayerColumn(
             IconButton(onClick = onToggleShuffle) {
                 Icon(Icons.Filled.Shuffle, contentDescription = "Shuffle", tint = if (state.shuffle) MaterialTheme.colorScheme.primary else Color.White)
             }
-            IconButton(onClick = onPrevious, enabled = state.queueIndex > 0 || state.positionMs > 3_000) {
+            // Only flips when the position crosses the restart threshold, not on every tick.
+            val pastRestart by remember(position) {
+                position.map { it > RESTART_THRESHOLD_MS }.distinctUntilChanged()
+            }.collectAsState(initial = position.value > RESTART_THRESHOLD_MS)
+            IconButton(onClick = onPrevious, enabled = state.queueIndex > 0 || pastRestart) {
                 Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous", tint = Color.White, modifier = Modifier.size(36.dp))
             }
             // Play/pause, ringed by a progress indicator while the stream buffers.
@@ -557,3 +571,20 @@ private const val BACKDROP_SCALE = 1.2f
 
 /** A player column wider than this reads as stretched; lyrics take the rest of the width. */
 private val PLAYER_MAX_WIDTH = 640.dp
+
+/** Past this, "previous" restarts the track (see AppViewModel.playPreviousInQueue). */
+private const val RESTART_THRESHOLD_MS = 3_000L
+
+/**
+ * Collects [position] and interpolates it per frame in its own scope, so only [content] (the lyrics)
+ * recomposes every frame, not the whole Now Playing screen.
+ */
+@Composable
+private fun SmoothPositionScope(
+    position: StateFlow<Long>,
+    state: PlaybackUiState,
+    content: @Composable (positionMs: Long) -> Unit,
+) {
+    val raw by position.collectAsState()
+    content(rememberSmoothPosition(raw, state.isPlaying && !state.isBuffering, state.durationMs, state.playbackSpeed))
+}
