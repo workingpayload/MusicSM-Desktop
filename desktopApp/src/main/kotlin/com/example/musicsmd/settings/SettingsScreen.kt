@@ -141,6 +141,13 @@ fun SettingsScreen(
         item { SectionTitle("Lyrics") }
         item {
             SettingsCard {
+                SettingsSwitch(
+                    "Open lyrics automatically",
+                    "Show the lyrics beside Now Playing whenever the song has them.",
+                    settings.autoOpenLyrics,
+                ) {
+                    onUpdate { it.copy(autoOpenLyrics = it.autoOpenLyrics.not()) }
+                }
                 SettingsSwitch("Prefer word-synced lyrics", "Use karaoke-style lyrics when a source can provide them.", settings.preferWordSyncedLyrics) {
                     onUpdate { it.copy(preferWordSyncedLyrics = it.preferWordSyncedLyrics.not()) }
                 }

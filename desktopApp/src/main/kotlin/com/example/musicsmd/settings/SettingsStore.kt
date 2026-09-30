@@ -49,6 +49,8 @@ data class DesktopSettings(
     val disabledLyricsSources: Set<String> = emptySet(),
     val preferWordSyncedLyrics: Boolean = true,
     val lyricsOffsetsMs: Map<String, Long> = emptyMap(),
+    // Open the lyrics beside Now Playing on their own whenever the song has them.
+    val autoOpenLyrics: Boolean = true,
 
     // Audio effects / output (libVLC)
     val equalizerEnabled: Boolean = false,

@@ -61,6 +61,7 @@ import java.awt.GraphicsEnvironment
 import com.example.musicsm.domain.model.Playlist
 import com.example.musicsm.domain.model.Song
 import com.example.musicsmd.audio.EqualizerScreen
+import com.example.musicsmd.desktop.AppIcon
 import com.example.musicsmd.desktop.MediaKeyController
 import com.example.musicsmd.desktop.MusicSmTray
 import com.example.musicsmd.desktop.handleMusicShortcut
@@ -121,6 +122,9 @@ private val MINI_PLAYER_MAX_WIDTH = 820.dp
 
 /** Mobile's NavHost push/pop duration. */
 private const val NAV_TRANSITION_MS = 300
+
+/** The single-image window icon Compose sets before the full size set replaces it. */
+private const val WINDOW_ICON_FALLBACK_SIZE = 64
 
 /** Mobile's player sheet spring. */
 private val SheetSpring = spring<Float>(
@@ -675,6 +679,7 @@ fun main() {
             visible = windowVisible,
             state = windowState,
             title = "MusicSM Desktop",
+            icon = remember { AppIcon.painter(WINDOW_ICON_FALLBACK_SIZE) },
             onKeyEvent = { event ->
                 handleMusicShortcut(event, viewModel) {
                     if (viewModel.playback.value.isExpanded) {
@@ -689,6 +694,11 @@ fun main() {
             val frameColor = if (settings.amoled) AmoledPalette.background else DarkPalette.background
             LaunchedEffect(frameColor, windowVisible) {
                 WindowChrome.apply(window, background = frameColor, text = DarkPalette.onSurface)
+            }
+            // Every icon size at once, so Windows picks a sharp one for the title bar, taskbar and
+            // Alt+Tab; the single `icon` above is only the fallback Compose sets first.
+            LaunchedEffect(Unit) {
+                AppIcon.windowImages.takeIf { it.isNotEmpty() }?.let { window.iconImages = it }
             }
             App(viewModel, lyricsController)
         }

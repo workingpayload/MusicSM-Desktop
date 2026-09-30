@@ -3,6 +3,7 @@
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.window.ApplicationScope
@@ -21,9 +22,12 @@ fun ApplicationScope.MusicSmTray(
     onQuit: () -> Unit,
 ) {
     val song = playback.currentSong
+    // Rendered down to the tray's size (16–20 px), so it starts from a small, sharp source.
+    val icon = remember { AppIcon.painter(TRAY_SOURCE_SIZE) }
+    val fallback = rememberVectorPainter(Icons.Filled.MusicNote)
     Tray(
         state = rememberTrayState(),
-        icon = rememberVectorPainter(Icons.Filled.MusicNote),
+        icon = icon ?: fallback,
         tooltip = song?.let { "${it.title} — ${it.artist}" } ?: "MusicSM Desktop",
         onAction = onShow,
         menu = {
@@ -36,3 +40,5 @@ fun ApplicationScope.MusicSmTray(
         },
     )
 }
+
+private const val TRAY_SOURCE_SIZE = 32

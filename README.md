@@ -48,7 +48,9 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
   recompose several times a second while music plays.
 - **Synced lyrics**: the mobile lyrics stack (Apple Music, BiniLyrics, LyricsPlus, SimpMusic,
   LRCLIB, KuGou, Unison, YouTube Music) with word-by-word highlighting, click-to-seek and per-song
-  sync offset, shown beside the artwork in Now Playing.
+  sync offset, shown beside the artwork in Now Playing. The panel opens on its own when a song has
+  lyrics (Settings → Lyrics → "Open lyrics automatically", on by default); closing it keeps it
+  closed for that song, and a panel that opened itself closes again for a song without lyrics.
 - **Equalizer**: libVLC presets, preamp and 10 bands, persisted.
 - **Stats**: play-event log (`stats.json`) with totals, top songs/artists, activity and
   listening-clock charts per range.
@@ -78,6 +80,9 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
 - **AMOLED black** (Settings → Appearance) — mobile's pure-black palette for OLED screens.
 - **Window frame** — on Windows the native title bar and border are painted in the app's
   background colour (DWM caption/border colours, dark caption buttons), following AMOLED.
+- **App icon** — the phone app's launcher icon (`ic_launcher_img`), cropped and rounded the way
+  Android shows it: every size in `resources/icons` for the title bar, taskbar, Alt+Tab and tray
+  (`AppIcon.kt`), and `desktopApp/icons/icon.ico` / `.icns` / `.png` for the installers.
 
 Not ported (Android-only or heavy): crossfade / DJ mix, animated motion artwork, Wear OS / widget
 / Quick Settings tile, in-app updater.
@@ -97,7 +102,8 @@ All app data lives in `~/.musicsm-desktop/` (`settings.json`, `library.json`, `s
 
 ## Requirements
 
-- JDK 17
+- JDK 25 — Gradle's daemon toolchain (`gradle/gradle-daemon-jvm.properties`); Android Studio's
+  bundled JBR is one, and is enough to build and run.
 - [VLC](https://www.videolan.org/vlc/) installed on the host machine (desktopApp uses libVLC
   through vlcj for audio playback — Media3 is Android-only, so there's no direct equivalent).
 
@@ -109,9 +115,15 @@ All app data lives in `~/.musicsm-desktop/` (`settings.json`, `library.json`, `s
 
 ## Packaging
 
+Installers are built by `jpackage`, which Android Studio's JBR doesn't include, so point packaging
+at a full JDK 25 or newer:
+
 ```powershell
-.\gradlew.bat :desktopApp:packageDistributionForCurrentOS
+.\gradlew.bat :desktopApp:packageMsi "-PpackagingJdk=C:\Program Files\Java\jdk-27"
 ```
+
+The installer lands in `desktopApp\build\compose\binaries\main\msi\` and adds a Start-menu entry.
+`createDistributable` builds the unpacked app (`...\main\app\`) without an installer.
 
 ## Notes carried over from the mobile app
 

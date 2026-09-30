@@ -54,10 +54,22 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "com.example.musicsmd.MainKt"
+        // Packaging runs jpackage from this JDK, by default the one running Gradle. Android Studio's
+        // bundled JDK has no jpackage, so pass a full JDK (25+, the version the app is compiled for)
+        // with -PpackagingJdk=<path> to build the installer.
+        providers.gradleProperty("packagingJdk").orNull?.let { javaHome = it }
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Dmg)
             packageName = "MusicSM Desktop"
             packageVersion = "1.0.0"
+            // The phone app's launcher icon, generated from its ic_launcher_img (see AppIcon.kt).
+            windows {
+                iconFile.set(project.file("icons/icon.ico"))
+                // A Start-menu entry, so the installed app has an icon to click.
+                menu = true
+            }
+            macOS { iconFile.set(project.file("icons/icon.icns")) }
+            linux { iconFile.set(project.file("icons/icon.png")) }
         }
     }
 }
