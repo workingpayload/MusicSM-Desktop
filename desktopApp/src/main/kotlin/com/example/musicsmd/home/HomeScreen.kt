@@ -1,5 +1,8 @@
-﻿package com.example.musicsmd.home
+package com.example.musicsmd.home
 
+import com.example.musicsmd.ui.components.ArtistCircle
+import com.example.musicsmd.ui.components.AlbumCard
+import com.example.musicsmd.ui.components.LocalBottomBarPadding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -114,7 +117,7 @@ private fun HomeShelves(
     LazyColumn(
         state = listState,
         verticalArrangement = Arrangement.spacedBy(6.dp),
-        contentPadding = PaddingValues(bottom = 28.dp),
+        contentPadding = PaddingValues(bottom = 28.dp + LocalBottomBarPadding.current),
     ) {
         sections.forEachIndexed { index, section ->
             item(key = "title-$index-${section.title}") { ShelfTitle(section.title) }
@@ -163,32 +166,13 @@ private fun ShelfTitle(title: String) {
 
 @Composable
 private fun <T> CardShelf(items: List<T>, onClick: (T) -> Unit, card: (T) -> CardInfo) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         items(items) { item ->
             val info = card(item)
-            GlassPanel(
-                modifier = Modifier.width(160.dp).clickable { onClick(item) },
-                shape = RoundedCornerShape(20.dp),
-                tint = GlassFill,
-            ) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                    ArtworkImage(
-                        url = info.artworkUrl,
-                        size = 140.dp,
-                        shape = if (info.circular) RoundedCornerShape(70.dp) else RoundedCornerShape(12.dp),
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(info.title, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
-                    if (info.subtitle.isNotBlank()) {
-                        Text(
-                            info.subtitle,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+            if (info.circular) {
+                ArtistCircle(name = info.title, artworkUrl = info.artworkUrl, onClick = { onClick(item) })
+            } else {
+                AlbumCard(title = info.title, subtitle = info.subtitle, artworkUrl = info.artworkUrl, onClick = { onClick(item) })
             }
         }
     }

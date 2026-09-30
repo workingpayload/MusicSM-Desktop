@@ -1,5 +1,6 @@
 package com.example.musicsmd.downloads
 
+import com.example.musicsmd.ui.components.LocalBottomBarPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -123,7 +124,7 @@ fun DownloadsScreen(
             }
         }
 
-        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + LocalBottomBarPadding.current)) {
             items(downloaded, key = { it.id }) { song ->
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     SongRow(song = song, onClick = { onSongClick(song, downloaded) }, modifier = Modifier.weight(1f))

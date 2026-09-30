@@ -1,5 +1,6 @@
 package com.example.musicsmd.local
 
+import com.example.musicsmd.ui.components.LocalBottomBarPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -126,7 +127,7 @@ fun LocalMusicScreen(
             AssistChip(onClick = { sort = nextSort(sort) }, label = { Text("Sort: ${sort.name.lowercase().replace('_', ' ')}") })
         }
 
-        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + LocalBottomBarPadding.current)) {
             items(visibleSongs, key = { it.id }) { song ->
                 SongRow(song = song, onClick = { onSongClick(song, visibleSongs) })
             }

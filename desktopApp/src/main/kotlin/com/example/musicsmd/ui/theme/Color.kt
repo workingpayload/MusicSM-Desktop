@@ -5,6 +5,7 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 
 /** Theme-aware colour tokens — thin accessors over [LocalMusicSmPalette], ported from mobile. */
+val AppBackground: Color @Composable @ReadOnlyComposable get() = LocalMusicSmPalette.current.background
 val SurfaceLowest: Color @Composable @ReadOnlyComposable get() = LocalMusicSmPalette.current.surfaceLowest
 val SurfaceLow: Color @Composable @ReadOnlyComposable get() = LocalMusicSmPalette.current.surfaceLow
 val SurfaceContainer: Color @Composable @ReadOnlyComposable get() = LocalMusicSmPalette.current.surfaceContainer
@@ -16,6 +17,8 @@ val Teal: Color @Composable @ReadOnlyComposable get() = LocalMusicSmPalette.curr
 val Lavender: Color @Composable @ReadOnlyComposable get() = LocalMusicSmPalette.current.lavender
 
 val OnSurfaceVariantPink: Color @Composable @ReadOnlyComposable get() = LocalMusicSmPalette.current.onSurfaceVariant
+val OnDark: Color @Composable @ReadOnlyComposable get() = LocalMusicSmPalette.current.onSurface
+val OnDarkVariant: Color @Composable @ReadOnlyComposable get() = LocalMusicSmPalette.current.onSurfaceVariant
 val OnDarkMuted: Color @Composable @ReadOnlyComposable get() = LocalMusicSmPalette.current.onSurfaceMuted
 val DividerColor: Color @Composable @ReadOnlyComposable get() = LocalMusicSmPalette.current.divider
 

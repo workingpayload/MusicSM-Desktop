@@ -1,5 +1,10 @@
-﻿package com.example.musicsmd.search
+package com.example.musicsmd.search
 
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TextField
+import com.example.musicsmd.ui.components.ArtistCircle
+import com.example.musicsmd.ui.components.AlbumCard
+import com.example.musicsmd.ui.components.LocalBottomBarPadding
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -105,8 +110,9 @@ fun SearchScreen(
     Column(modifier = modifier.fillMaxSize().padding(20.dp)) {
         Text("Search", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
-        GlassPanel(shape = RoundedCornerShape(20.dp), tint = GlassFill) {
-            OutlinedTextField(
+        // Mobile's search field: a frosted glass pane with a borderless field inside.
+        GlassPanel(shape = RoundedCornerShape(16.dp)) {
+            TextField(
                 value = state.query,
                 onValueChange = onQueryChange,
                 modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
@@ -120,12 +126,11 @@ fun SearchScreen(
                     }
                 },
                 singleLine = true,
-                shape = RoundedCornerShape(20.dp),
-                colors = OutlinedTextFieldDefaults.colors(
+                colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedBorderColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
                 ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { submit() }),
@@ -173,7 +178,7 @@ private fun SearchLanding(
 ) {
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(18.dp),
-        contentPadding = PaddingValues(bottom = 28.dp),
+        contentPadding = PaddingValues(bottom = 28.dp + LocalBottomBarPadding.current),
     ) {
         item {
             if (history.isNotEmpty()) {
@@ -246,7 +251,7 @@ private fun SearchResultsContent(
     val effective = if (selected in available) selected else SearchFilter.ALL
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(bottom = 28.dp),
+        contentPadding = PaddingValues(bottom = 28.dp + LocalBottomBarPadding.current),
     ) {
         item { FilterChips(available, effective, onSelectFilter) }
         when (effective) {
@@ -365,20 +370,13 @@ private fun <T> CardShelf(title: String, items: List<T>, onClick: (T) -> Unit, c
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionTitle(title)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             items(items) { item ->
                 val info = card(item)
-                GlassPanel(
-                    modifier = Modifier.width(156.dp).clickable { onClick(item) },
-                    shape = RoundedCornerShape(18.dp),
-                    tint = GlassFill,
-                ) {
-                    Column(Modifier.padding(8.dp)) {
-                        ArtworkImage(url = info.artworkUrl, size = 140.dp, shape = if (info.circular) RoundedCornerShape(70.dp) else RoundedCornerShape(12.dp))
-                        Spacer(Modifier.height(6.dp))
-                        Text(info.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (info.subtitle.isNotBlank()) Text(info.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
+                if (info.circular) {
+                    ArtistCircle(name = info.title, artworkUrl = info.artworkUrl, onClick = { onClick(item) })
+                } else {
+                    AlbumCard(title = info.title, subtitle = info.subtitle, artworkUrl = info.artworkUrl, onClick = { onClick(item) })
                 }
             }
         }

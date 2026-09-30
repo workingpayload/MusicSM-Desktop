@@ -1,5 +1,6 @@
-﻿package com.example.musicsmd.stats
+package com.example.musicsmd.stats
 
+import com.example.musicsmd.ui.components.LocalBottomBarPadding
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -144,7 +145,7 @@ private fun StatsBody(
     val topSongs = remember(stats.topSongs) { stats.topSongs.map { it.song } }
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(bottom = 28.dp),
+        contentPadding = PaddingValues(bottom = 28.dp + LocalBottomBarPadding.current),
     ) {
         item { SummaryGrid(stats) }
         item { Highlights(stats) }

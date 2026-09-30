@@ -5,9 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
@@ -29,31 +29,67 @@ import com.example.musicsmd.ui.theme.GlassStroke
 import com.example.musicsmd.ui.theme.GlassStrokeSoft
 import com.example.musicsmd.ui.theme.LocalMusicSmPalette
 import com.example.musicsmd.ui.theme.OverlayTint
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 
+/*
+ * The mobile app's glass design system (`ui/components/Glass.kt`), ported as-is. Both glass
+ * renderers are the same libraries at the same versions as mobile — Haze for frosted panels and
+ * Kyant's Backdrop for Liquid Glass — both of which run on Compose Desktop. The only difference is
+ * gating: desktop always has the hardware path and memory the mobile checks guard against, so
+ * [isGlassAllowed] is always true here.
+ */
+
 /**
- * Frosted-glass design system ported from the mobile app's `ui/components/Glass.kt`. Desktop
- * drops the Android-only "Liquid Glass" lens/backdrop refraction (RuntimeShader, API 33+) and the
- * low-RAM device gating, but keeps the same frosted-panel look: a blurred backdrop, a translucent
- * tint, a top-left gloss sheen and an additive rim.
- *
- * Shared [HazeState] for the whole window: background content registers as the blur source
- * ([glassBackdrop]), glass panels ([GlassPanel]) sample it.
+ * Shared [HazeState] for the whole app: background content registers as the blur source,
+ * glass panels sample it. Provided at the root so any panel can frost the scrolling content.
  */
 val LocalHazeState: ProvidableCompositionLocal<HazeState?> = compositionLocalOf { null }
 
+/**
+ * Height occupied by the floating glass chrome at the bottom (the mini player), so scrollable
+ * screens can add matching bottom content padding and let their last item scroll out from under
+ * the glass.
+ */
+val LocalBottomBarPadding: ProvidableCompositionLocal<Dp> = compositionLocalOf { 0.dp }
+
+/**
+ * Recording of the screen content that `liquid` [GlassPanel]s refract. Provide it only around
+ * panels that sit *outside* the recorded node: a panel sampling a layer that contains itself
+ * recurses and crashes.
+ */
+val LocalLiquidBackdrop: ProvidableCompositionLocal<Backdrop?> = compositionLocalOf { null }
+
 @Composable
 fun rememberHazeState(): HazeState = remember { HazeState() }
+
+/**
+ * Whether the real blur is worth attempting. On mobile this gates on API 31+ and non-low-RAM
+ * hardware; every desktop has the GPU path, so it is always allowed.
+ */
+@Composable
+fun isGlassAllowed(): Boolean = true
 
 /** Marks this content as the backdrop that glass panels blur. No-op if no haze state is present. */
 fun Modifier.glassBackdrop(state: HazeState?): Modifier =
     if (state != null) this.hazeSource(state) else this
 
-/** Traces [shape]'s edge with an additive light line — a rim is light caught on an edge. */
+/**
+ * Traces [shape]'s edge with an additive light line.
+ *
+ * Additive rather than drawn-over: a rim is light caught on an edge, so it has to brighten what is
+ * already there. A normal stroke of the same colour flattens into a drawn-on outline, and against
+ * a dark backdrop it reads as a border rather than as a lit edge.
+ */
 private fun Modifier.glassRim(shape: Shape, brush: Brush, width: Dp): Modifier = drawWithCache {
     val outline = shape.createOutline(size, layoutDirection, this)
     val stroke = Stroke(width.toPx())
@@ -65,8 +101,17 @@ private fun Modifier.glassRim(shape: Shape, brush: Brush, width: Dp): Modifier =
 
 /**
  * A frosted-glass panel: blurs whatever [LocalHazeState] content sits behind it, with a subtle
- * tint, a top-left gloss sheen and an additive rim, so it floats above the content it frosts.
- * Degrades to a translucent surface when no blur source is registered.
+ * white veil and a hairline highlight stroke. Degrades to a translucent surface when no blur
+ * source is available.
+ *
+ * With [liquid] on, the panel reads like Apple's Liquid Glass: a light, clear blur, a diagonal
+ * specular sheen sweeping the top-left, an additive rim catching the light along the same diagonal,
+ * and a soft drop shadow so the pill floats above the content it frosts. This is the treatment the
+ * floating chrome shares, and it shares it deliberately — the mini player and the dock are two
+ * panes of one piece of glass, so any divergence between them reads as a mistake.
+ *
+ * When a [LocalLiquidBackdrop] is provided, a liquid panel with a rounded shape is instead drawn as
+ * real Liquid Glass (see [LiquidGlassPanel]); the Haze version above stays as the fallback.
  */
 @Composable
 fun GlassPanel(
@@ -76,16 +121,27 @@ fun GlassPanel(
     liquid: Boolean = false,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val liquidBackdrop = LocalLiquidBackdrop.current
+    if (liquid && liquidBackdrop != null && shape is CornerBasedShape && isGlassAllowed()) {
+        LiquidGlassPanel(modifier, shape, tint, liquidBackdrop, content)
+        return
+    }
     val hazeState = LocalHazeState.current
-    val frosted = hazeState != null
+    val frosted = hazeState != null && isGlassAllowed()
+    // Cheaper than HazeMaterials: modest blur, no per-frame noise shader. Remembered so the
+    // style isn't reallocated on every recomposition/scroll frame.
     val hazeTint = LocalMusicSmPalette.current.hazeTint
     val style = remember(hazeTint, liquid) {
         HazeStyle(
-            blurRadius = if (liquid) 8.dp else 20.dp,
+            // Liquid glass is a clear tinted pane, not a frosted one: only a hair of blur so the
+            // content stays legible through it, and the tint + gloss do the separating instead.
+            blurRadius = if (liquid) 5.dp else 20.dp,
             tint = HazeTint(hazeTint),
             noiseFactor = 0f,
         )
     }
+    // Top gloss + faint bottom edge glow. A bright, quick-falling band across the top reads as a
+    // hard reflection off a glossy pane; the long diagonal fade behind it keeps the light directional.
     val sheen = remember {
         Brush.linearGradient(
             0.0f to Color.White.copy(alpha = 0.48f),
@@ -96,6 +152,8 @@ fun GlassPanel(
             end = Offset.Infinite,
         )
     }
+    // Brightest where the sheen enters and fading along the same diagonal, so the rim and the
+    // sheen read as one light source rather than two.
     val rim = remember {
         Brush.linearGradient(
             0.0f to Color.White.copy(alpha = RIM_ALPHA),
@@ -117,10 +175,15 @@ fun GlassPanel(
         modifier
     }
 
+    // The blur modifier is remembered as one instance, keyed only on things that actually change the
+    // blur, so recomposing the panel for an unrelated reason (a tab switch, a play/pause) reuses the
+    // same node instead of rebuilding it.
     val blur = remember(frosted, hazeState, style) {
         if (frosted) Modifier.hazeEffect(state = hazeState!!, style = style) else null
     }
     Box(modifier = shadowed.clip(shape)) {
+        // The blurred backdrop, kept in its own layer so the fill above it composites over a
+        // finished image rather than over the live blur.
         val backdrop = Modifier.matchParentSize()
         if (blur != null) {
             Box(backdrop.then(blur))
@@ -140,6 +203,52 @@ fun GlassPanel(
     }
 }
 
+/**
+ * Apple-style Liquid Glass: the content behind is saturated, lightly blurred and bent by a lens
+ * band along the rounded edge, with a specular highlight and soft shadow from the library.
+ */
+@Composable
+private fun LiquidGlassPanel(
+    modifier: Modifier,
+    shape: CornerBasedShape,
+    tint: Color,
+    backdrop: Backdrop,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val hazeTint = LocalMusicSmPalette.current.hazeTint
+    Box(
+        modifier = modifier
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { shape },
+                effects = {
+                    vibrancy()
+                    blur(LIQUID_BLUR.toPx())
+                    lens(
+                        refractionHeight = LIQUID_LENS_HEIGHT.toPx(),
+                        refractionAmount = LIQUID_LENS_AMOUNT.toPx(),
+                        depthEffect = true,
+                    )
+                },
+                highlight = { Highlight.Default },
+                onDrawSurface = {
+                    drawRect(hazeTint)
+                    drawRect(tint)
+                },
+            )
+            .clip(shape),
+        content = content,
+    )
+}
+
+// Clear rather than frosted, so what is behind stays recognisable through the bend.
+private val LIQUID_BLUR = 4.dp
+
+// The lens band must stay within the corner radius; the shortest pill (60 dp) has a 30 dp radius.
+private val LIQUID_LENS_HEIGHT = 16.dp
+private val LIQUID_LENS_AMOUNT = 32.dp
+
 /** Peak opacity of the additive rim. Additive light saturates fast, so this stays low. */
 private const val RIM_ALPHA = 0.48f
+
 private val RIM_WIDTH = 0.8.dp

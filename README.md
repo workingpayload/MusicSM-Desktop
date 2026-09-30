@@ -9,8 +9,9 @@ app; only the UI shell and playback engine are desktop-specific.
 
 Feature parity with the mobile app, minus Android-only pieces (see bottom of list):
 
-- **Navigation**: glass sidebar (Home / Search / Library / Downloads / Local / Stats / Settings)
-  with back-stack; window sized to the usable screen.
+- **Navigation**: the mobile app's landscape `SideDock` — one Liquid Glass pane on the left with a
+  sliding selection puck (Search / Listen / Library / Downloads / Local / Stats / Settings), with
+  back-stack; window sized to the usable screen.
 - **Home**: personalized feed like mobile (recently played, quick picks, daily rotation, forgotten
   favorites, ranked with `ShelfRanker`/`TasteProfile`) plus YouTube Music shelves (song rows and
   album/artist/playlist cards); more shelves load as you scroll.
@@ -24,10 +25,13 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
 - **Downloads**: offline copies in the downloads folder, played in preference to streaming;
   Downloads screen with play all / shuffle / delete; "Download all" on album/playlist pages.
 - **Local music**: scans chosen folders (tags + artwork via jaudiotagger), search, sort, play.
-- **Player**: floating glass mini player and full-screen Now Playing (seek, volume, like,
-  shuffle, repeat off/all/one, speed, sleep timer with fade-out, audio output picker, equalizer,
-  queue). Seek/volume use the mobile `AppleSeekBar`. Autoplay radio continues with related tracks
-  when the queue ends; the queue (paused) and volume are restored on launch.
+- **Player**: the mobile `MiniPlayer` Liquid Glass pill floating over the content, and a full-screen
+  Now Playing laid out like mobile's (blurred artwork backdrop, breathing cover, Apple-style
+  scrubber, controls card around the hue-tinted frosted `PlayPauseButton`, glassy volume track,
+  lyrics / output / queue row). Shuffle, repeat off/all/one, speed, sleep timer with fade-out,
+  equalizer; the output picker and sleep timer open as mobile's Liquid Glass sheet. Autoplay radio
+  continues with related tracks when the queue ends; the queue (paused) and volume are restored on
+  launch.
 - **Synced lyrics**: the mobile lyrics stack (Apple Music, BiniLyrics, LyricsPlus, SimpMusic,
   LRCLIB, KuGou, Unison, YouTube Music) with word-by-word highlighting, click-to-seek and per-song
   sync offset, shown beside the artwork in Now Playing.
@@ -38,12 +42,17 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
 - **Desktop extras**: keyboard shortcuts (Space play/pause, Ctrl+←/→ prev/next, Shift+←/→ seek,
   Ctrl+↑/↓ volume, Ctrl+L like, Ctrl+S shuffle, Ctrl+R repeat, Esc back), global media keys
   (JNativeHook), system tray with optional minimize-to-tray.
-- **Glassmorphic UI** ported from the mobile app's `Glass.kt` / `Palette.kt`: byte-identical dark
-  "Stitch" palette and a `GlassPanel` with real backdrop blur via
-  [Haze](https://github.com/chrisbanes/haze).
+- **Glass design** — the mobile app's `Glass.kt` ported as-is, with the same libraries and
+  versions: the byte-identical dark "Stitch" palette; `GlassPanel` frosted panels via
+  [Haze](https://github.com/chrisbanes/haze) 1.6.10; and **real Liquid Glass** (vibrancy, blur,
+  lens refraction at the rounded edge, specular highlight) via Kyant's
+  [Backdrop](https://github.com/Kyant0/AndroidLiquidGlass) 2.0.1, which runs on Compose Desktop.
+  Like mobile, the content is recorded once as both the Haze source and the Liquid Glass layer,
+  the chrome floats outside it so it can refract it, and lists fade into the background above the
+  mini player. Shelf cards are plain artwork, as on mobile — glass is only for floating chrome.
 
-Not ported (Android-only or heavy): crossfade / DJ mix, animated motion artwork, Liquid Glass lens
-refraction, Wear OS / widget / Quick Settings tile, in-app updater.
+Not ported (Android-only or heavy): crossfade / DJ mix, animated motion artwork, artwork-derived
+accent colours, Wear OS / widget / Quick Settings tile, in-app updater.
 
 All app data lives in `~/.musicsm-desktop/` (`settings.json`, `library.json`, `stats.json`,
 `downloads.json`, `queue.json`, …).

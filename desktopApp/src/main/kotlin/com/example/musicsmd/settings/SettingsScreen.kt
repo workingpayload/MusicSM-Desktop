@@ -1,5 +1,6 @@
-﻿package com.example.musicsmd.settings
+package com.example.musicsmd.settings
 
+import com.example.musicsmd.ui.components.LocalBottomBarPadding
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -68,7 +69,7 @@ fun SettingsScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize().padding(horizontal = 20.dp),
-        contentPadding = PaddingValues(top = 20.dp, bottom = 32.dp),
+        contentPadding = PaddingValues(top = 20.dp, bottom = 32.dp + LocalBottomBarPadding.current),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {

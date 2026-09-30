@@ -1,5 +1,6 @@
 package com.example.musicsmd.library
 
+import com.example.musicsmd.ui.components.LocalBottomBarPadding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -104,7 +105,7 @@ fun LibraryScreen(
             Spacer(modifier = Modifier.height(12.dp))
         }
 
-        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + LocalBottomBarPadding.current)) {
             item {
                 GlassPanel(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)

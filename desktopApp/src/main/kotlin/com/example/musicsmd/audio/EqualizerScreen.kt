@@ -1,5 +1,6 @@
-﻿package com.example.musicsmd.audio
+package com.example.musicsmd.audio
 
+import com.example.musicsmd.ui.components.LocalBottomBarPadding
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -71,7 +72,7 @@ fun EqualizerScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize().padding(horizontal = 28.dp),
-        contentPadding = PaddingValues(top = 24.dp, bottom = 36.dp),
+        contentPadding = PaddingValues(top = 24.dp, bottom = 36.dp + LocalBottomBarPadding.current),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         item {

@@ -1,5 +1,6 @@
 package com.example.musicsmd.ui.detail
 
+import com.example.musicsmd.ui.components.LocalBottomBarPadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -99,7 +100,7 @@ private fun DetailScaffold(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+            LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + LocalBottomBarPadding.current)) {
                 itemsIndexed(songs) { index, song ->
                     SongRow(
                         song = song,
