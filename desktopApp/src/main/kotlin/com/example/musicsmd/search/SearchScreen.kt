@@ -1,0 +1,413 @@
+﻿package com.example.musicsmd.search
+
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.example.musicsm.domain.model.Album
+import com.example.musicsm.domain.model.Artist
+import com.example.musicsm.domain.model.BrowseTile
+import com.example.musicsm.domain.model.Playlist
+import com.example.musicsm.domain.model.SearchResults
+import com.example.musicsm.domain.model.Song
+import com.example.musicsmd.player.AppUiState
+import com.example.musicsmd.settings.DesktopSettings
+import com.example.musicsmd.ui.components.ArtworkImage
+import com.example.musicsmd.ui.components.GlassPanel
+import com.example.musicsmd.ui.components.SongRow
+import com.example.musicsmd.ui.theme.Coral
+import com.example.musicsmd.ui.theme.GlassFill
+import com.example.musicsmd.ui.theme.GlassFillStrong
+import com.example.musicsmd.ui.theme.OnAccent
+
+@Composable
+fun SearchScreen(
+    state: AppUiState,
+    settings: DesktopSettings,
+    historyStore: SearchHistoryStore,
+    isLiked: (String) -> Boolean,
+    onQueryChange: (String) -> Unit,
+    onSearch: (includeVideos: Boolean) -> Unit,
+    onSongClick: (Song, List<Song>) -> Unit,
+    onToggleLike: (Song) -> Unit,
+    onAlbumClick: (Album) -> Unit,
+    onArtistClick: (Artist) -> Unit,
+    onPlaylistClick: (Playlist) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val history by historyStore.history.collectAsState()
+    var filter by remember { mutableStateOf(SearchFilter.ALL) }
+    val focusRequester = remember { FocusRequester() }
+
+    fun submit(query: String = state.query) {
+        val clean = query.trim()
+        if (clean.isBlank()) return
+        historyStore.add(clean)
+        onSearch(settings.searchVideos)
+        filter = SearchFilter.ALL
+    }
+
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    LaunchedEffect(settings.searchVideos) {
+        if (!settings.searchVideos && filter == SearchFilter.VIDEOS) filter = SearchFilter.ALL
+    }
+
+    Column(modifier = modifier.fillMaxSize().padding(20.dp)) {
+        Text("Search", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        GlassPanel(shape = RoundedCornerShape(20.dp), tint = GlassFill) {
+            OutlinedTextField(
+                value = state.query,
+                onValueChange = onQueryChange,
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                placeholder = { Text("Songs, albums, artists…") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (state.query.isNotEmpty()) {
+                        IconButton(onClick = { onQueryChange("") }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Clear")
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(20.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                ),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { submit() }),
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        when {
+            state.isSearching -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            state.query.isBlank() -> SearchLanding(
+                history = history,
+                onPickHistory = { query -> onQueryChange(query); submit(query) },
+                onRemoveHistory = historyStore::remove,
+                onClearHistory = historyStore::clear,
+                onTileClick = { tile -> onQueryChange(tile.query); submit(tile.query) },
+            )
+            state.searchResults.isEmpty -> EmptyResults(state.query)
+            else -> SearchResultsContent(
+                results = state.searchResults,
+                selected = filter,
+                videosEnabled = settings.searchVideos,
+                onSelectFilter = { filter = it },
+                isLiked = isLiked,
+                onSongClick = onSongClick,
+                onToggleLike = onToggleLike,
+                onAlbumClick = onAlbumClick,
+                onArtistClick = onArtistClick,
+                onPlaylistClick = onPlaylistClick,
+            )
+        }
+
+        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SearchLanding(
+    history: List<String>,
+    onPickHistory: (String) -> Unit,
+    onRemoveHistory: (String) -> Unit,
+    onClearHistory: () -> Unit,
+    onTileClick: (BrowseTile) -> Unit,
+) {
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+        contentPadding = PaddingValues(bottom = 28.dp),
+    ) {
+        item {
+            if (history.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Text("Recent searches", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Text("Clear", color = Coral, modifier = Modifier.clip(CircleShape).clickable(onClick = onClearHistory).padding(8.dp))
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        history.forEach { value ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.clip(CircleShape).background(GlassFillStrong).clickable { onPickHistory(value) }
+                                    .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+                            ) {
+                                Icon(Icons.Filled.History, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.width(6.dp))
+                                Text(value, maxLines = 1)
+                                Icon(
+                                    Icons.Filled.Close,
+                                    contentDescription = "Remove $value",
+                                    modifier = Modifier.size(18.dp).clip(CircleShape).clickable { onRemoveHistory(value) }.padding(2.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item { Text("Browse all", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        item {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                defaultBrowseTiles.forEach { tile -> BrowseTileCard(tile, onClick = { onTileClick(tile) }) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BrowseTileCard(tile: BrowseTile, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier.width(220.dp).height(104.dp).clip(RoundedCornerShape(22.dp))
+            .background(Color(tile.accentColor)).clickable(onClick = onClick).padding(16.dp),
+    ) {
+        Text(tile.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+    }
+}
+
+@Composable
+private fun SearchResultsContent(
+    results: SearchResults,
+    selected: SearchFilter,
+    videosEnabled: Boolean,
+    onSelectFilter: (SearchFilter) -> Unit,
+    isLiked: (String) -> Boolean,
+    onSongClick: (Song, List<Song>) -> Unit,
+    onToggleLike: (Song) -> Unit,
+    onAlbumClick: (Album) -> Unit,
+    onArtistClick: (Artist) -> Unit,
+    onPlaylistClick: (Playlist) -> Unit,
+) {
+    val available = buildList {
+        add(SearchFilter.ALL)
+        add(SearchFilter.SONGS)
+        if (videosEnabled) add(SearchFilter.VIDEOS)
+        add(SearchFilter.ALBUMS)
+        add(SearchFilter.ARTISTS)
+    }
+    val effective = if (selected in available) selected else SearchFilter.ALL
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(bottom = 28.dp),
+    ) {
+        item { FilterChips(available, effective, onSelectFilter) }
+        when (effective) {
+            SearchFilter.ALL -> {
+                item { TopResultCard(results, onSongClick, onAlbumClick, onArtistClick) }
+                songSection("Songs", results.songs.take(PREVIEW_COUNT), results.songs, isLiked, onSongClick, onToggleLike)
+                if (videosEnabled) songSection("Videos", results.videos.take(PREVIEW_COUNT), results.videos, isLiked, onSongClick, onToggleLike)
+                if (results.albums.isNotEmpty()) item { AlbumShelf("Albums", results.albums, onAlbumClick) }
+                if (results.artists.isNotEmpty()) item { ArtistShelf("Artists", results.artists, onArtistClick) }
+                if (results.playlists.isNotEmpty()) item { PlaylistShelf("Playlists", results.playlists, onPlaylistClick) }
+            }
+            SearchFilter.SONGS -> songSection("Songs", results.songs, results.songs, isLiked, onSongClick, onToggleLike)
+            SearchFilter.VIDEOS -> songSection("Videos", results.videos, results.videos, isLiked, onSongClick, onToggleLike)
+            SearchFilter.ALBUMS -> item { AlbumShelf("Albums", results.albums, onAlbumClick) }
+            SearchFilter.ARTISTS -> item { ArtistShelf("Artists", results.artists, onArtistClick) }
+        }
+    }
+}
+
+@Composable
+private fun FilterChips(filters: List<SearchFilter>, selected: SearchFilter, onSelect: (SearchFilter) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        filters.forEach { filter ->
+            val active = filter == selected
+            Text(
+                text = filter.label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                color = if (active) OnAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.clip(CircleShape).background(if (active) Coral else GlassFill)
+                    .clickable { onSelect(filter) }.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TopResultCard(
+    results: SearchResults,
+    onSongClick: (Song, List<Song>) -> Unit,
+    onAlbumClick: (Album) -> Unit,
+    onArtistClick: (Artist) -> Unit,
+) {
+    val song = results.songs.firstOrNull() ?: results.videos.firstOrNull()
+    if (song != null) {
+        TopCard(title = song.title, subtitle = song.artist, artworkUrl = song.artworkUrl, label = "Top result", onClick = { onSongClick(song, results.songs.ifEmpty { results.videos }) })
+        return
+    }
+    val album = results.albums.firstOrNull()
+    if (album != null) {
+        TopCard(title = album.title, subtitle = album.artist, artworkUrl = album.artworkUrl, label = "Top album", onClick = { onAlbumClick(album) })
+        return
+    }
+    val artist = results.artists.firstOrNull() ?: return
+    TopCard(title = artist.name, subtitle = artist.subscribers.orEmpty(), artworkUrl = artist.artworkUrl, label = "Top artist", circular = true, onClick = { onArtistClick(artist) })
+}
+
+@Composable
+private fun TopCard(title: String, subtitle: String, artworkUrl: String?, label: String, circular: Boolean = false, onClick: () -> Unit) {
+    GlassPanel(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick), shape = RoundedCornerShape(26.dp), tint = GlassFillStrong) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            ArtworkImage(url = artworkUrl, size = 84.dp, shape = if (circular) RoundedCornerShape(44.dp) else RoundedCornerShape(16.dp))
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = Coral, fontWeight = FontWeight.Bold)
+                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (subtitle.isNotBlank()) Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+private fun androidx.compose.foundation.lazy.LazyListScope.songSection(
+    title: String,
+    visibleSongs: List<Song>,
+    queue: List<Song>,
+    isLiked: (String) -> Boolean,
+    onSongClick: (Song, List<Song>) -> Unit,
+    onToggleLike: (Song) -> Unit,
+) {
+    if (visibleSongs.isEmpty()) return
+    item { SectionTitle(title) }
+    items(visibleSongs, key = { it.id }) { song ->
+        SongRow(
+            song = song,
+            onClick = { onSongClick(song, queue) },
+            isLiked = isLiked(song.id),
+            onToggleLike = { onToggleLike(song) },
+        )
+    }
+}
+
+@Composable
+private fun AlbumShelf(title: String, albums: List<Album>, onClick: (Album) -> Unit) {
+    CardShelf(title, albums, onClick) { CardInfo(it.title, it.artist, it.artworkUrl) }
+}
+
+@Composable
+private fun ArtistShelf(title: String, artists: List<Artist>, onClick: (Artist) -> Unit) {
+    CardShelf(title, artists, onClick) { CardInfo(it.name, it.subscribers.orEmpty(), it.artworkUrl, circular = true) }
+}
+
+@Composable
+private fun PlaylistShelf(title: String, playlists: List<Playlist>, onClick: (Playlist) -> Unit) {
+    CardShelf(title, playlists, onClick) { CardInfo(it.name, "Playlist", it.artworkUrl) }
+}
+
+@Composable
+private fun <T> CardShelf(title: String, items: List<T>, onClick: (T) -> Unit, card: (T) -> CardInfo) {
+    if (items.isEmpty()) {
+        EmptyResults("No ${title.lowercase()}")
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionTitle(title)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(items) { item ->
+                val info = card(item)
+                GlassPanel(
+                    modifier = Modifier.width(156.dp).clickable { onClick(item) },
+                    shape = RoundedCornerShape(18.dp),
+                    tint = GlassFill,
+                ) {
+                    Column(Modifier.padding(8.dp)) {
+                        ArtworkImage(url = info.artworkUrl, size = 140.dp, shape = if (info.circular) RoundedCornerShape(70.dp) else RoundedCornerShape(12.dp))
+                        Spacer(Modifier.height(6.dp))
+                        Text(info.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (info.subtitle.isNotBlank()) Text(info.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(title: String) {
+    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+}
+
+@Composable
+private fun EmptyResults(query: String) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text("No results for $query", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+private data class CardInfo(val title: String, val subtitle: String, val artworkUrl: String?, val circular: Boolean = false)
+
+private enum class SearchFilter(val label: String) { ALL("All"), SONGS("Songs"), VIDEOS("Videos"), ALBUMS("Albums"), ARTISTS("Artists") }
+
+private const val PREVIEW_COUNT = 5
+
+private val defaultBrowseTiles = listOf(
+    BrowseTile("new", "New releases", 0xFFE85D75, "new releases"),
+    BrowseTile("charts", "Charts", 0xFF35C2A1, "top songs"),
+    BrowseTile("chill", "Chill", 0xFF6C7AF2, "chill mix"),
+    BrowseTile("workout", "Workout", 0xFFFF8A3D, "workout music"),
+    BrowseTile("focus", "Focus", 0xFF8E7CFF, "focus music"),
+    BrowseTile("party", "Party", 0xFFE14ECA, "party hits"),
+)

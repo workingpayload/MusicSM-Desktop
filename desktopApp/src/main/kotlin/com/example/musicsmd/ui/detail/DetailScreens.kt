@@ -13,12 +13,15 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -45,6 +48,8 @@ private fun DetailScaffold(
     onSongClick: (Song, List<Song>) -> Unit,
     onToggleLike: (Song) -> Unit,
     isLoading: Boolean,
+    onDownloadAll: ((List<Song>) -> Unit)? = null,
+    onShare: (() -> Unit)? = null,
 ) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -66,10 +71,26 @@ private fun DetailScaffold(
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         if (songs.isNotEmpty()) {
-                            Button(onClick = { onSongClick(songs.first(), songs) }) {
-                                Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Play")
+                            Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                                Button(onClick = { onSongClick(songs.first(), songs) }) {
+                                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Play")
+                                }
+                                if (onDownloadAll != null) {
+                                    OutlinedButton(onClick = { onDownloadAll(songs) }) {
+                                        Icon(Icons.Filled.Download, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Download all")
+                                    }
+                                }
+                                if (onShare != null) {
+                                    OutlinedButton(onClick = onShare) {
+                                        Icon(Icons.Filled.Share, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Share")
+                                    }
+                                }
                             }
                         }
                     }
@@ -101,6 +122,7 @@ fun AlbumDetailScreen(
     onBack: () -> Unit,
     onSongClick: (Song, List<Song>) -> Unit,
     onToggleLike: (Song) -> Unit,
+    onDownloadAll: (List<Song>) -> Unit,
 ) {
     DetailScaffold(
         title = album?.title ?: "",
@@ -112,6 +134,7 @@ fun AlbumDetailScreen(
         onSongClick = onSongClick,
         onToggleLike = onToggleLike,
         isLoading = isLoading,
+        onDownloadAll = onDownloadAll,
     )
 }
 
@@ -123,6 +146,7 @@ fun ArtistDetailScreen(
     onBack: () -> Unit,
     onSongClick: (Song, List<Song>) -> Unit,
     onToggleLike: (Song) -> Unit,
+    onDownloadAll: (List<Song>) -> Unit,
 ) {
     DetailScaffold(
         title = artist?.name ?: "",
@@ -134,6 +158,7 @@ fun ArtistDetailScreen(
         onSongClick = onSongClick,
         onToggleLike = onToggleLike,
         isLoading = isLoading,
+        onDownloadAll = onDownloadAll,
     )
 }
 
@@ -145,6 +170,8 @@ fun PlaylistDetailScreen(
     onBack: () -> Unit,
     onSongClick: (Song, List<Song>) -> Unit,
     onToggleLike: (Song) -> Unit,
+    onDownloadAll: (List<Song>) -> Unit,
+    onSharePlaylist: (Playlist) -> Unit,
 ) {
     DetailScaffold(
         title = playlist?.name ?: "",
@@ -156,5 +183,7 @@ fun PlaylistDetailScreen(
         onSongClick = onSongClick,
         onToggleLike = onToggleLike,
         isLoading = isLoading,
+        onDownloadAll = onDownloadAll,
+        onShare = playlist?.takeIf { it.isLocal && it.songs.isNotEmpty() }?.let { { onSharePlaylist(it) } },
     )
 }

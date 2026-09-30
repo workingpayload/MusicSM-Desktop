@@ -19,8 +19,11 @@ dependencies {
     implementation(project(":innertube"))
 
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
     implementation(libs.newpipe.extractor)
+    implementation("net.sf.kxml:kxml2:2.3.0")
+    implementation("org.json:json:20240303")
     implementation(libs.javax.inject)
 
     testImplementation(libs.junit)

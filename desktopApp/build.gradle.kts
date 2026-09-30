@@ -29,6 +29,9 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.haze)
+    implementation(libs.zxing.core)
+    implementation(libs.zxing.javase)
+    implementation(libs.jaudiotagger)
 
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.swing)
@@ -39,6 +42,10 @@ dependencies {
     // libVLC bindings for audio playback (requires VLC installed on the host OS) — Media3 is
     // Android-only, so this is the desktop equivalent audio engine.
     implementation(libs.vlcj)
+    implementation(libs.jnativehook)
+    implementation("net.jthink:jaudiotagger:3.0.1")
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.zxing:javase:3.5.3")
 }
 
 compose.desktop {

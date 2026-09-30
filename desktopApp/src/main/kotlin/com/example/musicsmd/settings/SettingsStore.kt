@@ -72,7 +72,8 @@ class SettingsStore(private val file: File = File(AppPaths.dataDir, "settings.js
     }
 
     private fun load(): DesktopSettings =
-        runCatching { json.decodeFromString<DesktopSettings>(file.readText()) }.getOrDefault(DesktopSettings())
+        runCatching { json.decodeFromString<DesktopSettings>(file.readText().removePrefix("\uFEFF")) }
+            .getOrDefault(DesktopSettings())
 
     @Synchronized
     private fun save(settings: DesktopSettings) {

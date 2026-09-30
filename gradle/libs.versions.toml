@@ -8,9 +8,12 @@ kotlinxSerialization = "1.11.0"
 newpipeExtractor = "v0.26.5"
 javaxInject = "1"
 vlcj = "4.11.0"
+jnativehook = "2.2.2"
 junit = "4.13.2"
 coil = "3.6.0"
 haze = "1.5.3"
+zxing = "3.5.3"
+jaudiotagger = "3.0.1"
 
 [libraries]
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -19,6 +22,7 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 newpipe-extractor = { group = "com.github.TeamNewPipe", name = "NewPipeExtractor", version.ref = "newpipeExtractor" }
 javax-inject = { group = "javax.inject", name = "javax.inject", version.ref = "javaxInject" }
 vlcj = { group = "uk.co.caprica", name = "vlcj", version.ref = "vlcj" }
+jnativehook = { group = "com.github.kwhat", name = "jnativehook", version.ref = "jnativehook" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 ktor-client-core = { group = "io.ktor", name = "ktor-client-core", version.ref = "ktor" }
@@ -30,6 +34,9 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
 haze = { group = "dev.chrisbanes.haze", name = "haze", version.ref = "haze" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
+zxing-javase = { group = "com.google.zxing", name = "javase", version.ref = "zxing" }
+jaudiotagger = { group = "net.jthink", name = "jaudiotagger", version.ref = "jaudiotagger" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

@@ -18,6 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,7 +40,11 @@ import com.example.musicsm.domain.model.Playlist
 import com.example.musicsm.domain.model.Song
 import com.example.musicsmd.ui.components.ArtworkImage
 import com.example.musicsmd.ui.components.GlassPanel
+import com.example.musicsmd.share.decodeQrImage
 import com.example.musicsmd.ui.theme.GlassFill
+import java.awt.FileDialog
+import java.awt.Frame
+import java.io.File
 
 /** "Your Library": liked songs + local playlists, mirrors the mobile app's Library screen. */
 @Composable
@@ -50,10 +56,16 @@ fun LibraryScreen(
     onToggleLike: (Song) -> Unit,
     onPlaylistClick: (Playlist) -> Unit,
     onCreatePlaylist: (String) -> Unit,
+    onImportClick: () -> Unit,
+    onOpenSharedPlaylist: (String) -> Unit,
+    onSharePlaylist: (Playlist) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showOpenSharedDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
+    var sharedPayload by remember { mutableStateOf("") }
+    var sharedError by remember { mutableStateOf<String?>(null) }
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         Row(
@@ -62,8 +74,12 @@ fun LibraryScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Your Library", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
-            IconButton(onClick = { showCreateDialog = true }) {
-                Icon(Icons.Filled.Add, contentDescription = "New playlist")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onImportClick) { Text("Import playlist") }
+                TextButton(onClick = { showOpenSharedDialog = true }) { Text("Open shared playlist") }
+                IconButton(onClick = { showCreateDialog = true }) {
+                    Icon(Icons.Filled.Add, contentDescription = "New playlist")
+                }
             }
         }
 
@@ -124,6 +140,12 @@ fun LibraryScreen(
                         Text(playlist.name, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
                         Text("${playlist.songs.size} songs", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    Spacer(modifier = Modifier.weight(1f))
+                    if (playlist.isLocal && playlist.songs.isNotEmpty()) {
+                        IconButton(onClick = { onSharePlaylist(playlist) }) {
+                            Icon(Icons.Filled.Share, contentDescription = "Share playlist")
+                        }
+                    }
                 }
             }
 
@@ -136,6 +158,50 @@ fun LibraryScreen(
                     )
                 }
             }
+        }
+
+        if (showOpenSharedDialog) {
+            AlertDialog(
+                onDismissRequest = { showOpenSharedDialog = false },
+                title = { Text("Open shared playlist") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Paste a MusicSM shared playlist link or payload.")
+                        OutlinedTextField(
+                            value = sharedPayload,
+                            onValueChange = { sharedPayload = it; sharedError = null },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 3,
+                            maxLines = 4,
+                            label = { Text("Link or code") },
+                        )
+                        sharedError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                    }
+                },
+                confirmButton = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = {
+                            val dialog = FileDialog(null as Frame?, "Scan QR from image", FileDialog.LOAD).apply { isVisible = true }
+                            val selected = dialog.file
+                            val dir = dialog.directory
+                            if (selected != null && dir != null) {
+                                val decoded = decodeQrImage(File(dir, selected))
+                                if (decoded == null) sharedError = "No QR code found in that image" else sharedPayload = decoded
+                            }
+                        }) { Text("Scan QR image") }
+                        Button(onClick = {
+                            val payload = sharedPayload.trim()
+                            if (payload.isBlank()) {
+                                sharedError = "Paste a link or code first"
+                            } else {
+                                showOpenSharedDialog = false
+                                onOpenSharedPlaylist(payload)
+                            }
+                        }) { Text("Open") }
+                        TextButton(onClick = { showOpenSharedDialog = false }) { Text("Cancel") }
+                    }
+                },
+            )
         }
     }
 }

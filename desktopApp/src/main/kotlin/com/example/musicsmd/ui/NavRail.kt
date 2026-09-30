@@ -61,10 +61,10 @@ private fun RailItem(icon: ImageVector, label: String, selected: Boolean, onClic
             .padding(vertical = 6.dp)
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
-            .padding(PaddingValues(horizontal = 12.dp, vertical = 8.dp)),
+            .padding(PaddingValues(horizontal = 6.dp, vertical = 8.dp)),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, contentDescription = label, tint = color)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = color)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = color, maxLines = 1, softWrap = false)
     }
 }

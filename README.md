@@ -5,28 +5,48 @@ from YouTube Music (InnerTube) and audio via NewPipeExtractor. Built with **Kotl
 Multiplatform for Desktop** so the domain and data layers are shared verbatim with the mobile
 app; only the UI shell and playback engine are desktop-specific.
 
-## Status: MVP+ (expanded)
+## Status
 
-Covers the agreed MVP scope plus a fuller UI/feature pass:
+Feature parity with the mobile app, minus Android-only pieces (see bottom of list):
 
-- Sidebar navigation (Home / Search / Library) with back-stack.
-- Home feed with album/artist/playlist card shelves and song rows; more shelves load as you scroll.
-- Your Library: liked songs, local playlists (create + add tracks), recent plays — persisted to
-  `~/.musicsm-desktop/library.json` (JSON-file store, since Room isn't practical on plain JVM).
-- Album / Artist / Playlist detail screens with track lists and Play-all.
-- Mini player bar (artwork, like, expand, queue toggle) plus a full-screen Now Playing view
-  (seek, prev/play-pause/next, like, volume, queue toggle) and a slide-in queue panel.
-  Seek and volume use the mobile app's `AppleSeekBar` (thumbless capsule, flowing hue gradient).
-- Cover art via Coil3 (OkHttp network fetcher).
-- **Glassmorphic UI**, ported from the mobile app's `ui/components/Glass.kt` / `ui/theme/Palette.kt`:
-  a byte-identical dark "Stitch" colour palette, a `GlassPanel` frosted-glass component (real
-  backdrop blur via [Haze](https://github.com/chrisbanes/haze), translucent tint, top-left gloss
-  sheen, additive rim) applied to the nav rail, mini player, queue panel and Now Playing controls,
-  plus a blurred/darkened artwork backdrop on the full-screen player. Desktop drops the mobile
-  app's Android-only Liquid Glass lens refraction (RuntimeShader) and low-RAM device gating.
+- **Navigation**: glass sidebar (Home / Search / Library / Downloads / Local / Stats / Settings)
+  with back-stack; window sized to the usable screen.
+- **Home**: personalized feed like mobile (recently played, quick picks, daily rotation, forgotten
+  favorites, ranked with `ShelfRanker`/`TasteProfile`) plus YouTube Music shelves (song rows and
+  album/artist/playlist cards); more shelves load as you scroll.
+- **Search**: dedicated screen with All / Songs / Videos / Albums / Artists filters, top result,
+  recent-search history (`search_history.json`). Videos follow the "Videos in search" setting.
+- **Song menu** (⋮ or right-click on any song): play next, add to queue, start radio, add to /
+  new playlist, go to artist/album, download, share, like.
+- **Library**: liked songs, local playlists, recent plays (`library.json`); **playlist import**
+  from Spotify / Apple Music / YouTube / YouTube Music links; **playlist sharing** via a
+  backend-free `musicsm://` link + QR code (ZXing), and opening shared links or QR images.
+- **Downloads**: offline copies in the downloads folder, played in preference to streaming;
+  Downloads screen with play all / shuffle / delete; "Download all" on album/playlist pages.
+- **Local music**: scans chosen folders (tags + artwork via jaudiotagger), search, sort, play.
+- **Player**: floating glass mini player and full-screen Now Playing (seek, volume, like,
+  shuffle, repeat off/all/one, speed, sleep timer with fade-out, audio output picker, equalizer,
+  queue). Seek/volume use the mobile `AppleSeekBar`. Autoplay radio continues with related tracks
+  when the queue ends; the queue (paused) and volume are restored on launch.
+- **Synced lyrics**: the mobile lyrics stack (Apple Music, BiniLyrics, LyricsPlus, SimpMusic,
+  LRCLIB, KuGou, Unison, YouTube Music) with word-by-word highlighting, click-to-seek and per-song
+  sync offset, shown beside the artwork in Now Playing.
+- **Equalizer**: libVLC presets, preamp and 10 bands, persisted.
+- **Stats**: play-event log (`stats.json`) with totals, top songs/artists, activity and
+  listening-clock charts per range.
+- **Settings**: playback, search, lyrics source order/toggles, audio, folders, desktop, data.
+- **Desktop extras**: keyboard shortcuts (Space play/pause, Ctrl+←/→ prev/next, Shift+←/→ seek,
+  Ctrl+↑/↓ volume, Ctrl+L like, Ctrl+S shuffle, Ctrl+R repeat, Esc back), global media keys
+  (JNativeHook), system tray with optional minimize-to-tray.
+- **Glassmorphic UI** ported from the mobile app's `Glass.kt` / `Palette.kt`: byte-identical dark
+  "Stitch" palette and a `GlassPanel` with real backdrop blur via
+  [Haze](https://github.com/chrisbanes/haze).
 
-Downloads, lyrics, import/export, settings, EQ and mix mode are still not ported — out of scope
-for now; see the mobile app's `.codemap.md` for the full feature set if parity is needed later.
+Not ported (Android-only or heavy): crossfade / DJ mix, animated motion artwork, Liquid Glass lens
+refraction, Wear OS / widget / Quick Settings tile, in-app updater.
+
+All app data lives in `~/.musicsm-desktop/` (`settings.json`, `library.json`, `stats.json`,
+`downloads.json`, `queue.json`, …).
 
 ## Modules
 
@@ -35,7 +55,7 @@ for now; see the mobile app's `.codemap.md` for the full feature set if parity i
 | `:innertube` | Copied verbatim from the mobile app — YouTube Music InnerTube client. Plain JVM already. |
 | `:motionart` | Copied verbatim — animated cover-art lookup. Plain JVM already. |
 | `:domain` | Copied verbatim from the mobile app's `domain/` package — models, repository interfaces, recommend/match/share logic. Pure Kotlin, zero UI/platform deps. |
-| `:data` | The mobile app's `data/source/youtube` package (YouTubeMusicSource, NewPipeMusicSource, stream selection). Only change from the original: Android's `Log` swapped for `println`. |
+| `:data` | The mobile app's `data/source/youtube` package (YouTubeMusicSource, NewPipeMusicSource, stream selection), plus the lyrics providers/repository and playlist-import clients (Spotify, Apple Music, YouTube). Android APIs swapped for JVM ones (`Log` → `println`, `android.util.Xml` → kXML2, `android.util.Base64` → `java.util.Base64`, `AppPreferences` → `LyricsPreferences`). Unit tests ported alongside. |
 | `:desktopApp` | Compose Desktop UI, manual DI (`AppGraph`), and playback via [vlcj](https://github.com/caprica/vlcj) (libVLC bindings) — the desktop equivalent of the mobile app's Media3/ExoPlayer bridge. |
 
 ## Requirements

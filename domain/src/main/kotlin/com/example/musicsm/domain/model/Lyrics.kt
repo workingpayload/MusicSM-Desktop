@@ -47,11 +47,23 @@ enum class LyricsSource(val label: String) {
     /** Apple Music's line and word timings, via the keyless BetterLyrics proxy. Popular songs only. */
     APPLE_MUSIC("Apple Music"),
 
+    /** Apple Music's word timings from a second host, which also names the exact recording (ISRC). */
+    BINI_LYRICS("BiniLyrics"),
+
+    /** The YouLy+ lyrics backend: word and syllable timings, matched on the ISRC when it is known. */
+    LYRICS_PLUS("LyricsPlus"),
+
+    /** SimpMusic's database, looked up by the YouTube video itself, so it can't pick another cut. */
+    SIMPMUSIC("SimpMusic"),
+
     /** Open community database; the widest coverage of time-synced lyrics. */
     LRCLIB("LRCLIB"),
 
     /** KuGou's catalogue: strong on Asian releases and many international hits. */
     KUGOU("KuGou"),
+
+    /** Community-uploaded lyrics (Unison): thin coverage, but sometimes the only source with a song. */
+    UNISON("Unison"),
 
     /** YouTube Music's own lyrics tab. Plain text only, but matched to the exact video. */
     YOUTUBE_MUSIC("YouTube Music"),
