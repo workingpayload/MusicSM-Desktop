@@ -181,8 +181,10 @@ GitHub total. It reads the public releases of `workingpayload/MusicSM-Desktop`, 
 public under that name, or set `DESKTOP_GITHUB_REPO` on the Vercel project.
 
 The installers aren't code-signed, so Windows SmartScreen shows "Windows protected your PC" (More
-info → Run anyway), and macOS blocks the first launch (System Settings → Privacy & Security → Open
-Anyway, or `xattr -dr com.apple.quarantine "/Applications/MusicSM Desktop.app"`). The app links
+info → Run anyway), and macOS blocks the first launch of the DMG (System Settings → Privacy &
+Security → Open Anyway, or `xattr -dr com.apple.quarantine "/Applications/MusicSM Desktop.app"`).
+On a Mac, `curl -fsSL https://music-sm.vercel.app/install.sh | bash` (offered on the download page)
+installs the newest release without that prompt. The app links
 NewPipeExtractor (GPLv3) and ships libVLC (LGPL), so releases should come with the source under
 GPLv3 — a public repo covers that.
 
