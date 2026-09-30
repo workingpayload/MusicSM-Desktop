@@ -85,9 +85,12 @@ import com.example.musicsmd.ui.components.ArtworkImage
 import com.example.musicsmd.ui.components.LiquidGlassSheet
 import com.example.musicsmd.ui.components.LocalHazeState
 import com.example.musicsmd.ui.components.PlayPauseButton
+import com.example.musicsmd.ui.components.accentColorFor
 import com.example.musicsmd.ui.components.glassBackdrop
+import com.example.musicsmd.ui.components.rememberDominantColorState
 import com.example.musicsmd.ui.components.rememberHazeState
 import com.example.musicsmd.ui.theme.AppBackground
+import com.example.musicsmd.ui.theme.asThemeAccent
 import com.example.musicsmd.ui.theme.Coral
 import com.example.musicsmd.ui.theme.OnDarkVariant
 import com.kyant.backdrop.backdrops.layerBackdrop
@@ -140,6 +143,12 @@ fun NowPlayingScreen(
     val liquidBackdrop = rememberLayerBackdrop()
     // So the output pill names the real device the moment the player opens, as on mobile.
     LaunchedEffect(Unit) { onRefreshAudioOutputs() }
+    val accent = rememberDominantColorState(url = song.artworkUrl, fallback = accentColorFor(song.id))
+    // Foreground accents (volume fill, labels) need to read on the dark player: a near-black cover
+    // swatch that works as a background wash would vanish as a bar. Hueless covers keep the theme
+    // accent. Background tints below still use the raw swatch, as on mobile.
+    val themeAccent = Coral
+    val readableAccent = accent.value.asThemeAccent() ?: themeAccent
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Everything on screen, recorded for the sheets' Liquid Glass to refract.
@@ -164,9 +173,11 @@ fun NowPlayingScreen(
                         )
                     }
                 }
-                // Vertical darkening for legibility, as on mobile's non-immersive layout.
+                // Dominant-colour tint + vertical darkening for legibility (colour read in draw phase),
+                // as on mobile's non-immersive layout.
                 Box(
                     Modifier.matchParentSize().drawBehind {
+                        drawRect(accent.value.copy(alpha = 0.35f))
                         drawRect(
                             Brush.verticalGradient(
                                 0.0f to Color.Black.copy(alpha = 0.20f),
@@ -186,6 +197,7 @@ fun NowPlayingScreen(
                     Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
                         PlayerColumn(
                             state = state,
+                            accent = readableAccent,
                             showLyrics = showLyrics,
                             onCollapse = onCollapse,
                             onTogglePlayPause = onTogglePlayPause,
@@ -261,6 +273,7 @@ fun NowPlayingScreen(
 @Composable
 private fun PlayerColumn(
     state: PlaybackUiState,
+    accent: Color,
     showLyrics: Boolean,
     onCollapse: () -> Unit,
     onTogglePlayPause: () -> Unit,
@@ -291,7 +304,7 @@ private fun PlayerColumn(
                 Text(
                     formatSleepRemaining(state.sleepTimer),
                     style = MaterialTheme.typography.labelMedium,
-                    color = Coral,
+                    color = accent,
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
                         .clickable(onClick = onOpenSleepTimer)
@@ -302,14 +315,14 @@ private fun PlayerColumn(
                 "${formatSpeed(state.playbackSpeed)}×",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = if (state.playbackSpeed != 1f) Coral else Color.White.copy(alpha = 0.72f),
+                color = if (state.playbackSpeed != 1f) accent else Color.White.copy(alpha = 0.72f),
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
                     .clickable { onPlaybackSpeedChange(nextSpeed(state.playbackSpeed)) }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             )
             IconButton(onClick = onOpenSleepTimer) {
-                Icon(Icons.Filled.Bedtime, contentDescription = "Sleep timer", tint = if (state.sleepTimer.isActive) Coral else Color.White)
+                Icon(Icons.Filled.Bedtime, contentDescription = "Sleep timer", tint = if (state.sleepTimer.isActive) accent else Color.White)
             }
             IconButton(onClick = onOpenEqualizer) {
                 Icon(Icons.Filled.GraphicEq, contentDescription = "Equalizer", tint = Color.White)
@@ -420,7 +433,7 @@ private fun PlayerColumn(
 
         Spacer(Modifier.height(16.dp))
 
-        GlassyVolume(volume = state.volume, onVolumeChange = onVolumeChange)
+        GlassyVolume(volume = state.volume, accent = accent, onVolumeChange = onVolumeChange)
 
         Spacer(Modifier.height(10.dp))
 
@@ -439,13 +452,11 @@ private fun PlayerColumn(
     }
 }
 
-/** Mobile's volume slider: a glassy 8 dp track with a hairline rim, filled with the accent. */
+/** Mobile's volume slider: a glassy 8 dp track with a hairline rim, tinted by the album-art accent. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun GlassyVolume(volume: Int, onVolumeChange: (Int) -> Unit) {
-    // Mobile tints this with the artwork's dominant colour; desktop has no palette extraction, so
-    // it uses the theme accent the mobile tint falls back to.
-    val volAccent = Coral
+private fun GlassyVolume(volume: Int, accent: Color, onVolumeChange: (Int) -> Unit) {
+    val volAccent = accent
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Icon(Icons.AutoMirrored.Filled.VolumeDown, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
         Slider(

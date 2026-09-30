@@ -5,6 +5,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
 
 private fun MusicSmPalette.toColorScheme() = darkColorScheme(
     primary = accent,
@@ -34,11 +35,12 @@ private fun MusicSmPalette.toColorScheme() = darkColorScheme(
 
 /**
  * App theme, ported from the mobile app's Stitch "Glassmorphic Music Streamer" design
- * (`ui/theme/Theme.kt`) — dark-only on desktop for now, but byte-identical in colour.
+ * (`ui/theme/Theme.kt`) — dark-only on desktop, byte-identical in colour. [accent], when set,
+ * re-tints the accent family (mobile's "Theme from artwork").
  */
 @Composable
-fun MusicSMTheme(content: @Composable () -> Unit) {
-    val palette = remember { DarkPalette }
+fun MusicSMTheme(accent: Color? = null, content: @Composable () -> Unit) {
+    val palette = remember(accent) { accent?.let { DarkPalette.withAccent(it) } ?: DarkPalette }
     CompositionLocalProvider(LocalMusicSmPalette provides palette) {
         MaterialTheme(colorScheme = palette.toColorScheme(), content = content)
     }

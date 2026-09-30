@@ -25,8 +25,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
 import com.example.musicsm.domain.model.Album
 import com.example.musicsm.domain.model.Artist
@@ -35,7 +40,12 @@ import com.example.musicsm.domain.model.Song
 import com.example.musicsmd.ui.components.ArtworkImage
 import com.example.musicsmd.ui.components.GlassPanel
 import com.example.musicsmd.ui.components.SongRow
+import com.example.musicsmd.ui.components.accentColorFor
+import com.example.musicsmd.ui.components.rememberDominantColorState
+import com.example.musicsmd.ui.theme.AppBackground
 import com.example.musicsmd.ui.theme.GlassFill
+import com.example.musicsmd.ui.theme.asDeepTint
+import com.example.musicsmd.ui.theme.isHueless
 
 /** Shared header + song-list layout for Album/Artist/Playlist detail screens. */
 @Composable
@@ -52,7 +62,33 @@ private fun DetailScaffold(
     onDownloadAll: ((List<Song>) -> Unit)? = null,
     onShare: (() -> Unit)? = null,
 ) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    val accent = rememberDominantColorState(url = artworkUrl ?: songs.firstOrNull()?.artworkUrl, fallback = accentColorFor(title))
+    // Palette tokens are composable reads, so they are hoisted out of the draw lambda. A cover with
+    // no usable hue is left alone rather than deepened: deepening grey only makes a muddier grey.
+    val backdrop = AppBackground
+    val tint by remember(backdrop) {
+        derivedStateOf {
+            val raw = accent.value
+            if (raw.isHueless()) backdrop else raw.asDeepTint()
+        }
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .drawBehind {
+                // Held flat over the top half, then eased out over the bottom, as on mobile: a
+                // single flat fill leaves a seam where the cover the tint came from stops and the
+                // plain track list starts; easing it turns that line into a deliberate wash.
+                drawRect(
+                    Brush.verticalGradient(
+                        0.0f to tint,
+                        0.5f to tint,
+                        1.0f to backdrop,
+                    ),
+                )
+            }
+            .padding(16.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface) }
         }

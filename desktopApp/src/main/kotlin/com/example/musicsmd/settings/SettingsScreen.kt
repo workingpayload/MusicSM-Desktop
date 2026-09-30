@@ -77,6 +77,19 @@ fun SettingsScreen(
             Text("Tune MusicSM Desktop", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
+        item { SectionTitle("Appearance") }
+        item {
+            SettingsCard {
+                SettingsSwitch(
+                    "Theme from artwork",
+                    "Tint buttons, links and highlights with the current song's cover colour.",
+                    settings.themeFromArtwork,
+                ) {
+                    onUpdate { it.copy(themeFromArtwork = it.themeFromArtwork.not()) }
+                }
+            }
+        }
+
         item { SectionTitle("Playback") }
         item {
             SettingsCard {

@@ -1,5 +1,8 @@
 package com.example.musicsmd.search
 
+import com.example.musicsmd.ui.components.rememberDominantColorState
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TextField
 import com.example.musicsmd.ui.components.ArtistCircle
@@ -107,7 +110,25 @@ fun SearchScreen(
         if (!settings.searchVideos && filter == SearchFilter.VIDEOS) filter = SearchFilter.ALL
     }
 
-    Column(modifier = modifier.fillMaxSize().padding(20.dp)) {
+    // Tint the header by the top result's artwork (falls back to the accent), as on mobile.
+    val firstArtwork = state.searchResults.takeIf { state.query.isNotBlank() }?.let { r ->
+        r.songs.firstOrNull()?.artworkUrl
+            ?: r.albums.firstOrNull()?.artworkUrl
+            ?: r.artists.firstOrNull()?.artworkUrl
+            ?: r.videos.firstOrNull()?.artworkUrl
+    }
+    val headerAccent = rememberDominantColorState(firstArtwork, fallback = Coral)
+
+    Column(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .drawBehind {
+                    val c = headerAccent.value
+                    drawRect(Brush.verticalGradient(listOf(c.copy(alpha = 0.45f), Color.Transparent)))
+                }
+                .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 12.dp),
+        ) {
         Text("Search", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
         // Mobile's search field: a frosted glass pane with a borderless field inside.
@@ -136,9 +157,9 @@ fun SearchScreen(
                 keyboardActions = KeyboardActions(onSearch = { submit() }),
             )
         }
+        }
 
-        Spacer(Modifier.height(12.dp))
-
+        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         when {
             state.isSearching -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             state.query.isBlank() -> SearchLanding(
@@ -164,6 +185,7 @@ fun SearchScreen(
         }
 
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
+        }
     }
 }
 

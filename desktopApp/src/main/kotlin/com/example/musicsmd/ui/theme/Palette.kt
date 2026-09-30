@@ -69,3 +69,40 @@ val DarkPalette = MusicSmPalette(
 )
 
 val LocalMusicSmPalette = staticCompositionLocalOf { DarkPalette }
+
+/**
+ * Re-tints the palette around [seed] while keeping its surface tiers — mobile's `withAccent`
+ * (dark branch). The artwork only drives the accent family, so the glassmorphic surfaces stay
+ * recognisably MusicSM.
+ */
+fun MusicSmPalette.withAccent(seed: Color): MusicSmPalette = copy(
+    accent = seed,
+    accentDark = seed.shade(0.16f),
+    accentLight = seed.tint(0.55f),
+    onAccent = if (seed.isDarkEnoughForWhiteText()) Color.White else Color(0xFF1B1B1F),
+)
+
+/** Mixes [this] toward black by [amount]. */
+private fun Color.shade(amount: Float): Color = Color(
+    red = red * (1f - amount),
+    green = green * (1f - amount),
+    blue = blue * (1f - amount),
+    alpha = alpha,
+)
+
+/** Mixes [this] toward white by [amount]. */
+private fun Color.tint(amount: Float): Color = Color(
+    red = red + (1f - red) * amount,
+    green = green + (1f - green) * amount,
+    blue = blue + (1f - blue) * amount,
+    alpha = alpha,
+)
+
+/** Relative luminance test (WCAG-ish) deciding whether white or near-black content reads better. */
+fun Color.isDarkEnoughForWhiteText(): Boolean {
+    fun channel(c: Float) = if (c <= 0.03928f) c / 12.92f else Math.pow(
+        ((c + 0.055f) / 1.055f).toDouble(), 2.4,
+    ).toFloat()
+    val luminance = 0.2126f * channel(red) + 0.7152f * channel(green) + 0.0722f * channel(blue)
+    return luminance < 0.45f
+}

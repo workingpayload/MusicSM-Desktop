@@ -45,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -67,7 +68,9 @@ import com.example.musicsm.domain.model.Lyrics
 import com.example.musicsm.domain.model.Song
 import com.example.musicsmd.ui.components.ArtworkImage
 import com.example.musicsmd.ui.components.GlassPanel
+import com.example.musicsmd.ui.components.rememberDominantColorState
 import com.example.musicsmd.ui.theme.Coral
+import com.example.musicsmd.ui.theme.asThemeAccent
 import com.example.musicsmd.ui.theme.GlassFillStrong
 import com.example.musicsmd.ui.theme.OnDarkMuted
 import java.util.Locale
@@ -94,6 +97,7 @@ fun LyricsPanel(
         -1
     }
     val activeLineTimeMs = loaded?.lines?.getOrNull(activeIndex)?.timeMs
+    val accent = rememberDominantColorState(song?.artworkUrl, fallback = Coral)
 
     GlassPanel(
         modifier = modifier.fillMaxHeight(),
@@ -101,10 +105,25 @@ fun LyricsPanel(
         tint = GlassFillStrong,
         liquid = true,
     ) {
+        // Mobile's lyrics backdrop: the cover's dominant tint under a darkening gradient, read in
+        // the draw phase so the colour animation between tracks only repaints.
+        Box(
+            Modifier.matchParentSize().drawBehind {
+                drawRect(accent.value.copy(alpha = 0.30f))
+                drawRect(
+                    Brush.verticalGradient(
+                        0.0f to Color.Black.copy(alpha = 0.20f),
+                        0.6f to Color.Black.copy(alpha = 0.35f),
+                        1.0f to Color.Black.copy(alpha = 0.55f),
+                    ),
+                )
+            },
+        )
         Column(modifier = Modifier.fillMaxSize().padding(18.dp)) {
             LyricsHeader(
                 song = song,
                 lyrics = loaded,
+                accent = accent.value.asThemeAccent() ?: Coral,
                 offsetMs = lyricsOffsetMs,
                 activeLineTimeMs = activeLineTimeMs,
                 positionMs = positionMs,
@@ -118,7 +137,7 @@ fun LyricsPanel(
 
             when (lyricsState) {
                 LyricsUiState.Idle -> CenterMessage("Play a song to load lyrics.")
-                LyricsUiState.Loading -> LoadingLyrics()
+                LyricsUiState.Loading -> LoadingLyrics(accent = accent.value.asThemeAccent() ?: Coral)
                 LyricsUiState.NotFound -> CenterMessage("No lyrics found for this track.")
                 is LyricsUiState.Error -> CenterMessage(lyricsState.message)
                 is LyricsUiState.Loaded -> LyricsLines(
@@ -138,6 +157,7 @@ fun LyricsPanel(
 private fun LyricsHeader(
     song: Song?,
     lyrics: Lyrics?,
+    accent: Color,
     offsetMs: Long,
     activeLineTimeMs: Long?,
     positionMs: Long,
@@ -193,7 +213,7 @@ private fun LyricsHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(Icons.Filled.Tune, contentDescription = null, tint = Coral, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.Tune, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
                 LyricsChip("-250ms") { onAdjustLyricsOffset(-250L) }
                 LyricsChip("+250ms") { onAdjustLyricsOffset(250L) }
                 LyricsChip("Sync to line") { activeLineTimeMs?.let { onSetLyricsOffset(positionMs - it) } }
@@ -341,7 +361,7 @@ private fun CenterMessage(text: String) {
 }
 
 @Composable
-private fun LoadingLyrics() {
+private fun LoadingLyrics(accent: Color) {
     val transition = rememberInfiniteTransition(label = "lyricsLoading")
     val pulse by transition.animateFloat(
         initialValue = 0.28f,
@@ -371,7 +391,7 @@ private fun LoadingLyrics() {
             )
         }
         Spacer(modifier = Modifier.weight(1f))
-        CircularProgressIndicator(color = Coral, modifier = Modifier.align(Alignment.CenterHorizontally).size(28.dp))
+        CircularProgressIndicator(color = accent, modifier = Modifier.align(Alignment.CenterHorizontally).size(28.dp))
     }
 }
 

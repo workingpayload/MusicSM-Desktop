@@ -50,9 +50,17 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
   Like mobile, the content is recorded once as both the Haze source and the Liquid Glass layer,
   the chrome floats outside it so it can refract it, and lists fade into the background above the
   mini player. Shelf cards are plain artwork, as on mobile — glass is only for floating chrome.
+- **Album-art colours** — mobile's artwork theming, with AndroidX Palette's algorithm ported to
+  plain Kotlin (`ui/theme/ArtworkPalette.kt`: same median-cut quantizer, targets and scoring, pick
+  = vibrant → dominant → dark vibrant → muted). As on mobile, Now Playing is tinted by the cover
+  (background wash, volume bar, labels), lyrics sit on the cover's tint, album/artist/playlist
+  pages wash into a deepened cover colour, and the Search header glows with the top result's cover.
+  **Theme from artwork** (Settings → Appearance, on by default here, opt-in on mobile) recolours the
+  whole app's accent to the current song's cover; covers without a real hue keep the stock coral,
+  and very dark or pale ones are lifted so buttons and links stay readable.
 
-Not ported (Android-only or heavy): crossfade / DJ mix, animated motion artwork, artwork-derived
-accent colours, Wear OS / widget / Quick Settings tile, in-app updater.
+Not ported (Android-only or heavy): crossfade / DJ mix, animated motion artwork, Wear OS / widget
+/ Quick Settings tile, in-app updater.
 
 All app data lives in `~/.musicsm-desktop/` (`settings.json`, `library.json`, `stats.json`,
 `downloads.json`, `queue.json`, …).

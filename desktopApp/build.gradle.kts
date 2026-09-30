@@ -47,6 +47,8 @@ dependencies {
     implementation("net.jthink:jaudiotagger:3.0.1")
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.google.zxing:javase:3.5.3")
+
+    testImplementation(libs.junit)
 }
 
 compose.desktop {

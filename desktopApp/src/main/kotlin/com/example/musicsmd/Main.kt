@@ -18,6 +18,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -72,7 +73,9 @@ import com.example.musicsmd.ui.detail.AlbumDetailScreen
 import com.example.musicsmd.ui.detail.ArtistDetailScreen
 import com.example.musicsmd.ui.detail.PlaylistDetailScreen
 import com.example.musicsmd.ui.theme.AppBackground
+import com.example.musicsmd.ui.theme.ArtworkColors
 import com.example.musicsmd.ui.theme.MusicSMTheme
+import com.example.musicsmd.ui.theme.asThemeAccent
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlinx.coroutines.delay
@@ -143,7 +146,15 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
         },
     )
 
-    MusicSMTheme {
+    // Resolved once per track rather than animated through the root, as mobile's AppThemeViewModel
+    // does: animating it would recompose the whole app every frame of the transition. The previous
+    // accent is kept while the next cover loads, so the theme never flashes back to the default.
+    val artworkUrl = playback.currentSong?.artworkUrl
+    val themeAccent by produceState<Color?>(initialValue = null, settings.themeFromArtwork, artworkUrl) {
+        value = if (settings.themeFromArtwork) ArtworkColors.accentFor(artworkUrl)?.asThemeAccent() else null
+    }
+
+    MusicSMTheme(accent = themeAccent) {
         val hazeState = rememberHazeState()
         val liquidBackdrop = rememberLayerBackdrop()
         val density = LocalDensity.current

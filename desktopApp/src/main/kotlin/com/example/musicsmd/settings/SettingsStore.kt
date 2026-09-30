@@ -35,6 +35,9 @@ data class DesktopSettings(
     // Search
     val searchVideos: Boolean = false,
 
+    // Appearance — mobile's "Theme from artwork"; on by default on desktop.
+    val themeFromArtwork: Boolean = true,
+
     // Lyrics — names of `com.example.musicsm.domain.model.LyricsSource` entries.
     val lyricsSourceOrder: List<String> = emptyList(),
     val disabledLyricsSources: Set<String> = emptySet(),
