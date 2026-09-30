@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
@@ -28,7 +29,9 @@ import com.example.musicsm.domain.model.Artist
 import com.example.musicsm.domain.model.Playlist
 import com.example.musicsm.domain.model.Song
 import com.example.musicsmd.ui.components.ArtworkImage
+import com.example.musicsmd.ui.components.GlassPanel
 import com.example.musicsmd.ui.components.SongRow
+import com.example.musicsmd.ui.theme.GlassFill
 
 /** Shared header + song-list layout for Album/Artist/Playlist detail screens. */
 @Composable
@@ -45,27 +48,29 @@ private fun DetailScaffold(
 ) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") }
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface) }
         }
         Spacer(modifier = Modifier.height(8.dp))
 
         if (isLoading) {
             CircularProgressIndicator(modifier = Modifier.padding(24.dp))
         } else {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ArtworkImage(url = artworkUrl, size = 160.dp)
-                Spacer(modifier = Modifier.width(16.dp))
-                Column {
-                    Text(title, style = MaterialTheme.typography.headlineSmall)
-                    if (subtitle != null) {
-                        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    if (songs.isNotEmpty()) {
-                        Button(onClick = { onSongClick(songs.first(), songs) }) {
-                            Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Play")
+            GlassPanel(shape = RoundedCornerShape(20.dp), tint = GlassFill) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(20.dp)) {
+                    ArtworkImage(url = artworkUrl, size = 160.dp, shape = RoundedCornerShape(16.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text(title, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
+                        if (subtitle != null) {
+                            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        if (songs.isNotEmpty()) {
+                            Button(onClick = { onSongClick(songs.first(), songs) }) {
+                                Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Play")
+                            }
                         }
                     }
                 }

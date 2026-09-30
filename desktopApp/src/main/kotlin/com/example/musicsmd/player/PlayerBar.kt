@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -19,7 +20,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -27,9 +27,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.musicsmd.ui.components.ArtworkImage
+import com.example.musicsmd.ui.components.GlassPanel
+import com.example.musicsmd.ui.theme.GlassFillStrong
 
-/** Bottom playback bar — desktop counterpart of the mobile app's mini player. Click anywhere
- * (except the buttons) to expand into [NowPlayingScreen]. */
+/** Floating frosted mini-player — desktop counterpart of the mobile app's [MiniPlayer]/glass bar.
+ * Click anywhere (except the buttons) to expand into [NowPlayingScreen]. */
 @Composable
 fun PlayerBar(
     state: PlaybackUiState,
@@ -43,13 +45,18 @@ fun PlayerBar(
     modifier: Modifier = Modifier,
 ) {
     val song = state.currentSong ?: return
-    Surface(modifier = modifier.fillMaxWidth(), tonalElevation = 4.dp) {
-        Column(modifier = Modifier.padding(12.dp)) {
+    GlassPanel(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        tint = GlassFillStrong,
+        liquid = true,
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ArtworkImage(url = song.artworkUrl, size = 48.dp)
+                ArtworkImage(url = song.artworkUrl, size = 48.dp, shape = RoundedCornerShape(12.dp))
                 Column(modifier = Modifier.weight(1f).clickable(onClick = onExpand).padding(start = 12.dp)) {
-                    Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
-                    Text(song.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                    Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                    Text(song.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 IconButton(onClick = onToggleLike) {
                     Icon(
@@ -59,7 +66,7 @@ fun PlayerBar(
                     )
                 }
                 Controls(state = state, onTogglePlayPause = onTogglePlayPause, onNext = onNext, onPrevious = onPrevious)
-                IconButton(onClick = onToggleQueue) { Icon(Icons.Filled.QueueMusic, contentDescription = "Queue") }
+                IconButton(onClick = onToggleQueue) { Icon(Icons.Filled.QueueMusic, contentDescription = "Queue", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
             Slider(
                 value = state.positionMs.toFloat(),
@@ -67,8 +74,8 @@ fun PlayerBar(
                 onValueChange = { onSeek(it.toLong()) },
             )
             Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Text(formatMs(state.positionMs), style = MaterialTheme.typography.labelSmall)
-                Text(formatMs(state.durationMs), style = MaterialTheme.typography.labelSmall)
+                Text(formatMs(state.positionMs), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(formatMs(state.durationMs), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -81,9 +88,10 @@ private fun RowScope.Controls(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
 ) {
-    IconButton(onClick = onPrevious) { Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous") }
+    val tint = MaterialTheme.colorScheme.onSurface
+    IconButton(onClick = onPrevious) { Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous", tint = tint) }
     IconButton(onClick = onTogglePlayPause) {
-        Icon(if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = "Play/Pause")
+        Icon(if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = "Play/Pause", tint = tint)
     }
-    IconButton(onClick = onNext) { Icon(Icons.Filled.SkipNext, contentDescription = "Next") }
+    IconButton(onClick = onNext) { Icon(Icons.Filled.SkipNext, contentDescription = "Next", tint = tint) }
 }

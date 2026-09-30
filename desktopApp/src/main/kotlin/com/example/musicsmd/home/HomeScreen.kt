@@ -2,6 +2,7 @@ package com.example.musicsmd.home
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -21,6 +23,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -34,7 +37,9 @@ import com.example.musicsm.domain.model.HomeSection
 import com.example.musicsm.domain.model.Song
 import com.example.musicsmd.player.AppUiState
 import com.example.musicsmd.ui.components.ArtworkImage
+import com.example.musicsmd.ui.components.GlassPanel
 import com.example.musicsmd.ui.components.SongRow
+import com.example.musicsmd.ui.theme.GlassFill
 
 /** Home/Search screen: search bar on top, then either home shelves or search results. */
 @Composable
@@ -57,6 +62,12 @@ fun HomeScreen(
             placeholder = { Text("Search songs, albums, artists…") },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             singleLine = true,
+            shape = RoundedCornerShape(50),
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = GlassFill,
+                focusedContainerColor = GlassFill,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+            ),
             keyboardActions = KeyboardActions(onSearch = { onSearch() }),
         )
 
@@ -141,7 +152,12 @@ private fun HomeShelves(
 
 @Composable
 private fun ShelfTitle(title: String) {
-    Text(text = title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 8.dp))
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(vertical = 8.dp),
+    )
 }
 
 @Composable
@@ -154,24 +170,28 @@ private fun <T> CardShelf(items: List<T>, circular: Boolean = false, onClick: (T
                 is Artist -> item.artworkUrl
                 else -> null
             }
-            Column(
-                modifier = Modifier.width(140.dp).clickableCard { onClick(item) },
+            GlassPanel(
+                modifier = Modifier.width(156.dp).clickableCard { onClick(item) },
+                shape = RoundedCornerShape(16.dp),
+                tint = GlassFill,
             ) {
-                ArtworkImage(
-                    url = artworkUrl,
-                    size = 140.dp,
-                    shape = if (circular) androidx.compose.foundation.shape.RoundedCornerShape(70.dp) else androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
-                if (subtitle.isNotBlank()) {
-                    Text(
-                        subtitle,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Column(modifier = Modifier.padding(8.dp)) {
+                    ArtworkImage(
+                        url = artworkUrl,
+                        size = 140.dp,
+                        shape = if (circular) RoundedCornerShape(70.dp) else RoundedCornerShape(10.dp),
                     )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                    if (subtitle.isNotBlank()) {
+                        Text(
+                            subtitle,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }

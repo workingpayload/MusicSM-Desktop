@@ -17,6 +17,12 @@ Covers the agreed MVP scope plus a fuller UI/feature pass:
 - Mini player bar (artwork, like, expand, queue toggle) plus a full-screen Now Playing view
   (seek, prev/play-pause/next, like, volume, queue toggle) and a slide-in queue panel.
 - Cover art via Coil3 (OkHttp network fetcher).
+- **Glassmorphic UI**, ported from the mobile app's `ui/components/Glass.kt` / `ui/theme/Palette.kt`:
+  a byte-identical dark "Stitch" colour palette, a `GlassPanel` frosted-glass component (real
+  backdrop blur via [Haze](https://github.com/chrisbanes/haze), translucent tint, top-left gloss
+  sheen, additive rim) applied to the nav rail, mini player, queue panel and Now Playing controls,
+  plus a blurred/darkened artwork backdrop on the full-screen player. Desktop drops the mobile
+  app's Android-only Liquid Glass lens refraction (RuntimeShader) and low-RAM device gating.
 
 Downloads, lyrics, import/export, settings, EQ and mix mode are still not ported — out of scope
 for now; see the mobile app's `.codemap.md` for the full feature set if parity is needed later.

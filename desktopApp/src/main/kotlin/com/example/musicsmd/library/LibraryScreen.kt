@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -36,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import com.example.musicsm.domain.model.Playlist
 import com.example.musicsm.domain.model.Song
 import com.example.musicsmd.ui.components.ArtworkImage
+import com.example.musicsmd.ui.components.GlassPanel
+import com.example.musicsmd.ui.theme.GlassFill
 
 /** "Your Library": liked songs + local playlists, mirrors the mobile app's Library screen. */
 @Composable
@@ -58,7 +61,7 @@ fun LibraryScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Your Library", style = MaterialTheme.typography.headlineSmall)
+            Text("Your Library", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
             IconButton(onClick = { showCreateDialog = true }) {
                 Icon(Icons.Filled.Add, contentDescription = "New playlist")
             }
@@ -87,16 +90,21 @@ fun LibraryScreen(
 
         LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                        .clickable { if (likedSongs.isNotEmpty()) onSongClick(likedSongs.first(), likedSongs) }
-                        .padding(vertical = 8.dp),
+                GlassPanel(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                        .clickable { if (likedSongs.isNotEmpty()) onSongClick(likedSongs.first(), likedSongs) },
+                    shape = RoundedCornerShape(16.dp),
+                    tint = GlassFill,
                 ) {
-                    Icon(Icons.Filled.Favorite, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.width(40.dp))
-                    Column {
-                        Text("Liked Songs", style = MaterialTheme.typography.bodyLarge)
-                        Text("${likedSongs.size} songs", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 12.dp),
+                    ) {
+                        Icon(Icons.Filled.Favorite, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.width(40.dp))
+                        Column {
+                            Text("Liked Songs", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                            Text("${likedSongs.size} songs", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
@@ -109,11 +117,11 @@ fun LibraryScreen(
                     if (playlist.artworkUrl != null) {
                         ArtworkImage(url = playlist.artworkUrl, size = 40.dp)
                     } else {
-                        Icon(Icons.Filled.PlaylistPlay, contentDescription = null, modifier = Modifier.width(40.dp))
+                        Icon(Icons.Filled.PlaylistPlay, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(40.dp))
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
-                        Text(playlist.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(playlist.name, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
                         Text("${playlist.songs.size} songs", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }

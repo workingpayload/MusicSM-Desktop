@@ -15,6 +15,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.example.musicsmd.ui.theme.SurfaceHigh
 
 /** Song/album/artist/playlist cover art, with a placeholder icon when [url] is null or fails. */
 @Composable
@@ -23,7 +24,7 @@ fun ArtworkImage(url: String?, size: Dp, modifier: Modifier = Modifier, shape: R
         modifier = modifier
             .size(size)
             .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .background(SurfaceHigh),
         contentAlignment = Alignment.Center,
     ) {
         if (url != null) {
