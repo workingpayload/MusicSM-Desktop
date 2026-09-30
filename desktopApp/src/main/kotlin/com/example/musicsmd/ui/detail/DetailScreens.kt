@@ -1,6 +1,7 @@
 package com.example.musicsmd.ui.detail
 
 import com.example.musicsmd.ui.components.LocalBottomBarPadding
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -46,6 +47,7 @@ import com.example.musicsmd.ui.components.SongRow
 import com.example.musicsmd.ui.components.accentColorFor
 import com.example.musicsmd.ui.components.rememberDominantColorState
 import com.example.musicsmd.ui.theme.AppBackground
+import com.example.musicsmd.ui.theme.Coral
 import com.example.musicsmd.ui.theme.GlassFill
 import com.example.musicsmd.ui.theme.asDeepTint
 import com.example.musicsmd.ui.theme.isHueless
@@ -103,7 +105,14 @@ private fun DetailScaffold(
         Spacer(modifier = Modifier.height(8.dp))
 
         if (isLoading) {
-            CircularProgressIndicator(modifier = Modifier.padding(24.dp))
+            // Centred in the page, as on mobile — a spinner in the top-left corner sat right
+            // against the side dock and read as part of it.
+            Box(
+                modifier = Modifier.fillMaxSize().padding(bottom = LocalBottomBarPadding.current),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(color = Coral)
+            }
         } else {
             GlassPanel(shape = RoundedCornerShape(20.dp), tint = GlassFill) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(20.dp)) {
