@@ -63,6 +63,14 @@ val LocalHazeState: ProvidableCompositionLocal<HazeState?> = compositionLocalOf 
 val LocalBottomBarPadding: ProvidableCompositionLocal<Dp> = compositionLocalOf { 0.dp }
 
 /**
+ * Width of the glass side dock that floats over the left edge. Screen content is inset by it, but a
+ * screen that paints its own background (a tinted header, an artwork wash) draws that background
+ * this much further left, so the colour runs under the dock to the window edge — the dock is glass,
+ * and glass over plain background where the page is coloured reads as a cut.
+ */
+val LocalDockInset: ProvidableCompositionLocal<Dp> = compositionLocalOf { 0.dp }
+
+/**
  * Recording of the screen content that `liquid` [GlassPanel]s refract. Provide it only around
  * panels that sit *outside* the recorded node: a panel sampling a layer that contains itself
  * recurses and crashes.

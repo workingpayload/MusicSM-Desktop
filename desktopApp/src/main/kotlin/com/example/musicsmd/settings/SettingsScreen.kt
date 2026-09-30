@@ -87,6 +87,13 @@ fun SettingsScreen(
                 ) {
                     onUpdate { it.copy(themeFromArtwork = it.themeFromArtwork.not()) }
                 }
+                SettingsSwitch(
+                    "AMOLED black",
+                    "Pure black backgrounds to save power on OLED screens.",
+                    settings.amoled,
+                ) {
+                    onUpdate { it.copy(amoled = it.amoled.not()) }
+                }
             }
         }
 

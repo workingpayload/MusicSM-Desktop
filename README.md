@@ -57,7 +57,11 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
   pages wash into a deepened cover colour, and the Search header glows with the top result's cover.
   **Theme from artwork** (Settings → Appearance, on by default here, opt-in on mobile) recolours the
   whole app's accent to the current song's cover; covers without a real hue keep the stock coral,
-  and very dark or pale ones are lifted so buttons and links stay readable.
+  and very dark or pale ones are lifted so buttons and links stay readable. Tinted page backgrounds
+  run under the glass side dock to the window edge.
+- **AMOLED black** (Settings → Appearance) — mobile's pure-black palette for OLED screens.
+- **Window frame** — on Windows the native title bar and border are painted in the app's
+  background colour (DWM caption/border colours, dark caption buttons), following AMOLED.
 
 Not ported (Android-only or heavy): crossfade / DJ mix, animated motion artwork, Wear OS / widget
 / Quick Settings tile, in-app updater.

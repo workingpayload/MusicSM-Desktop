@@ -1,5 +1,8 @@
 package com.example.musicsmd.search
 
+import com.example.musicsmd.ui.components.LocalDockInset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
 import com.example.musicsmd.ui.components.rememberDominantColorState
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.drawBehind
@@ -118,6 +121,7 @@ fun SearchScreen(
             ?: r.videos.firstOrNull()?.artworkUrl
     }
     val headerAccent = rememberDominantColorState(firstArtwork, fallback = Coral)
+    val dockInset = LocalDockInset.current
 
     Column(modifier = modifier.fillMaxSize()) {
         Column(
@@ -125,7 +129,13 @@ fun SearchScreen(
                 .fillMaxWidth()
                 .drawBehind {
                     val c = headerAccent.value
-                    drawRect(Brush.verticalGradient(listOf(c.copy(alpha = 0.45f), Color.Transparent)))
+                    // Runs under the glass dock to the window edge (see LocalDockInset).
+                    val under = dockInset.toPx()
+                    drawRect(
+                        Brush.verticalGradient(listOf(c.copy(alpha = 0.45f), Color.Transparent)),
+                        topLeft = Offset(-under, 0f),
+                        size = Size(size.width + under, size.height),
+                    )
                 }
                 .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 12.dp),
         ) {

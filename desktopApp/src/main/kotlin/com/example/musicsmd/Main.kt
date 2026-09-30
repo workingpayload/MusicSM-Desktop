@@ -72,10 +72,14 @@ import com.example.musicsmd.ui.components.rememberHazeState
 import com.example.musicsmd.ui.detail.AlbumDetailScreen
 import com.example.musicsmd.ui.detail.ArtistDetailScreen
 import com.example.musicsmd.ui.detail.PlaylistDetailScreen
+import com.example.musicsmd.ui.theme.AmoledPalette
 import com.example.musicsmd.ui.theme.AppBackground
 import com.example.musicsmd.ui.theme.ArtworkColors
+import com.example.musicsmd.ui.theme.DarkPalette
 import com.example.musicsmd.ui.theme.MusicSMTheme
 import com.example.musicsmd.ui.theme.asThemeAccent
+import com.example.musicsmd.desktop.WindowChrome
+import com.example.musicsmd.ui.components.LocalDockInset
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlinx.coroutines.delay
@@ -154,7 +158,7 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
         value = if (settings.themeFromArtwork) ArtworkColors.accentFor(artworkUrl)?.asThemeAccent() else null
     }
 
-    MusicSMTheme(accent = themeAccent) {
+    MusicSMTheme(accent = themeAccent, amoled = settings.amoled) {
         val hazeState = rememberHazeState()
         val liquidBackdrop = rememberLayerBackdrop()
         val density = LocalDensity.current
@@ -168,6 +172,7 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
             LocalHazeState provides hazeState,
             LocalSongActions provides songActions,
             LocalBottomBarPadding provides bottomInset,
+            LocalDockInset provides dockSpace,
             LocalContentColor provides MaterialTheme.colorScheme.onSurface,
         ) {
             Box(modifier = Modifier.fillMaxSize().background(AppBackground)) {
@@ -183,6 +188,8 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
                         .glassBackdrop(hazeState)
                         .background(AppBackground)
                         // Inside the recorded layer, so the strip under the dock is still painted.
+                        // Screens that tint their background extend it into this strip (see
+                        // LocalDockInset), so the colour runs under the glass dock to the window edge.
                         .padding(start = dockSpace),
                 ) {
                     Row(modifier = Modifier.fillMaxSize()) {
@@ -533,6 +540,11 @@ fun main() {
                 }
             },
         ) {
+            // Title bar and border in the app's background colour, re-applied when AMOLED toggles.
+            val frameColor = if (settings.amoled) AmoledPalette.background else DarkPalette.background
+            LaunchedEffect(frameColor, windowVisible) {
+                WindowChrome.apply(window, background = frameColor, text = DarkPalette.onSurface)
+            }
             App(viewModel, lyricsController)
         }
     }

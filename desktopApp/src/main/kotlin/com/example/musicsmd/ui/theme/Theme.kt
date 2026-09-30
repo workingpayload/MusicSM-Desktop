@@ -35,12 +35,16 @@ private fun MusicSmPalette.toColorScheme() = darkColorScheme(
 
 /**
  * App theme, ported from the mobile app's Stitch "Glassmorphic Music Streamer" design
- * (`ui/theme/Theme.kt`) — dark-only on desktop, byte-identical in colour. [accent], when set,
- * re-tints the accent family (mobile's "Theme from artwork").
+ * (`ui/theme/Theme.kt`) — dark-only on desktop, byte-identical in colour. [amoled] swaps in the
+ * pure-black base tiers; [accent], when set, re-tints the accent family (mobile's "Theme from
+ * artwork").
  */
 @Composable
-fun MusicSMTheme(accent: Color? = null, content: @Composable () -> Unit) {
-    val palette = remember(accent) { accent?.let { DarkPalette.withAccent(it) } ?: DarkPalette }
+fun MusicSMTheme(accent: Color? = null, amoled: Boolean = false, content: @Composable () -> Unit) {
+    val palette = remember(accent, amoled) {
+        val base = if (amoled) AmoledPalette else DarkPalette
+        accent?.let { base.withAccent(it) } ?: base
+    }
     CompositionLocalProvider(LocalMusicSmPalette provides palette) {
         MaterialTheme(colorScheme = palette.toColorScheme(), content = content)
     }

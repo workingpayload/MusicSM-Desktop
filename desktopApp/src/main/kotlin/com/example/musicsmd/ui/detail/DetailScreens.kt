@@ -31,6 +31,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
 import com.example.musicsm.domain.model.Album
@@ -39,6 +41,7 @@ import com.example.musicsm.domain.model.Playlist
 import com.example.musicsm.domain.model.Song
 import com.example.musicsmd.ui.components.ArtworkImage
 import com.example.musicsmd.ui.components.GlassPanel
+import com.example.musicsmd.ui.components.LocalDockInset
 import com.example.musicsmd.ui.components.SongRow
 import com.example.musicsmd.ui.components.accentColorFor
 import com.example.musicsmd.ui.components.rememberDominantColorState
@@ -66,6 +69,7 @@ private fun DetailScaffold(
     // Palette tokens are composable reads, so they are hoisted out of the draw lambda. A cover with
     // no usable hue is left alone rather than deepened: deepening grey only makes a muddier grey.
     val backdrop = AppBackground
+    val dockInset = LocalDockInset.current
     val tint by remember(backdrop) {
         derivedStateOf {
             val raw = accent.value
@@ -79,12 +83,16 @@ private fun DetailScaffold(
                 // Held flat over the top half, then eased out over the bottom, as on mobile: a
                 // single flat fill leaves a seam where the cover the tint came from stops and the
                 // plain track list starts; easing it turns that line into a deliberate wash.
+                // Drawn from the window edge, under the glass dock (see LocalDockInset).
+                val under = dockInset.toPx()
                 drawRect(
                     Brush.verticalGradient(
                         0.0f to tint,
                         0.5f to tint,
                         1.0f to backdrop,
                     ),
+                    topLeft = Offset(-under, 0f),
+                    size = Size(size.width + under, size.height),
                 )
             }
             .padding(16.dp),

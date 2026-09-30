@@ -70,6 +70,18 @@ val DarkPalette = MusicSmPalette(
 
 val LocalMusicSmPalette = staticCompositionLocalOf { DarkPalette }
 
+/** Pure-black variant for OLED panels, as on mobile: only the *base* tiers collapse to black. */
+val AmoledPalette = DarkPalette.copy(
+    background = Color.Black,
+    surfaceLowest = Color.Black,
+    surfaceLow = Color(0xFF0A0A0C),
+    surfaceContainer = Color(0xFF121214),
+    surfaceHigh = Color(0xFF1C1C1F),
+    surfaceHighest = Color(0xFF26262A),
+    surfaceBright = Color(0xFF2B2B30),
+    glassFillStrong = Color(0x401C1C1F),
+)
+
 /**
  * Re-tints the palette around [seed] while keeping its surface tiers — mobile's `withAccent`
  * (dark branch). The artwork only drives the accent family, so the glassmorphic surfaces stay

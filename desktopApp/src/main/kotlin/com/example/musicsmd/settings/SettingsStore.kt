@@ -37,6 +37,8 @@ data class DesktopSettings(
 
     // Appearance — mobile's "Theme from artwork"; on by default on desktop.
     val themeFromArtwork: Boolean = true,
+    // Mobile's "AMOLED black": pure black base surfaces.
+    val amoled: Boolean = false,
 
     // Lyrics — names of `com.example.musicsm.domain.model.LyricsSource` entries.
     val lyricsSourceOrder: List<String> = emptyList(),

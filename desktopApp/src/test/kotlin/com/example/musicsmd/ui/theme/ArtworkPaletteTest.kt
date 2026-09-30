@@ -118,6 +118,14 @@ class ArtworkPaletteTest {
     }
 
     @Test
+    fun `amoled variant blacks out the base tiers but keeps the accent`() {
+        assertEquals(Color.Black, AmoledPalette.background)
+        assertEquals(Color.Black, AmoledPalette.surfaceLowest)
+        assertEquals(DarkPalette.accent, AmoledPalette.accent)
+        assertNotEquals(Color.Black, AmoledPalette.surfaceHigh)
+    }
+
+    @Test
     fun `luminance test matches the extremes`() {
         assertTrue(Color.Black.isDarkEnoughForWhiteText())
         assertFalse(Color.White.isDarkEnoughForWhiteText())
