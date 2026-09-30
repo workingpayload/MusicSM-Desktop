@@ -5,8 +5,10 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -85,6 +87,7 @@ import com.example.musicsmd.share.copyTextToClipboard
 import com.example.musicsmd.stats.StatsScreen
 import com.example.musicsmd.ui.SideDock
 import com.example.musicsmd.ui.components.GlassPanel
+import com.example.musicsmd.ui.components.HeaderWash
 import com.example.musicsmd.ui.components.LocalBottomBarPadding
 import com.example.musicsmd.ui.components.LocalHazeState
 import com.example.musicsmd.ui.components.LocalLiquidBackdrop
@@ -96,6 +99,7 @@ import com.example.musicsmd.ui.detail.PlaylistDetailScreen
 import com.example.musicsmd.ui.theme.AmoledPalette
 import com.example.musicsmd.ui.theme.AppBackground
 import com.example.musicsmd.ui.theme.ArtworkColors
+import com.example.musicsmd.ui.theme.Coral
 import com.example.musicsmd.ui.theme.DarkPalette
 import com.example.musicsmd.ui.theme.MusicSMTheme
 import com.example.musicsmd.ui.theme.asThemeAccent
@@ -168,6 +172,8 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
     }
     var toastMessage by remember { mutableStateOf<String?>(null) }
     var sharePlaylist by remember { mutableStateOf<Playlist?>(null) }
+    // Kept after leaving Search, so going back shows its header colour at once.
+    var searchTint by remember { mutableStateOf<Color?>(null) }
 
     val likedIds = uiState.likedSongs.map { it.id }.toSet()
     val downloadedIds = downloadedSongs.map { it.id }.toSet()
@@ -237,6 +243,19 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
         // Derived, so the root recomposes when the sheet appears or goes, not on every frame.
         val sheetShown by remember { derivedStateOf { sheet.value > 0.001f } }
 
+        // The header gradient: Search's top-result colour on Search, the accent on every other
+        // tab, faded out on detail pages, which wash in their own cover's colour.
+        val washColor by animateColorAsState(
+            targetValue = searchTint.takeIf { uiState.screen == Screen.Search } ?: Coral,
+            animationSpec = tween(WASH_COLOR_MS),
+            label = "washColor",
+        )
+        val washOpacity by animateFloatAsState(
+            targetValue = if (uiState.screen.hasHeaderWash()) 1f else 0f,
+            animationSpec = tween(NAV_TRANSITION_MS),
+            label = "washOpacity",
+        )
+
         CompositionLocalProvider(
             LocalHazeState provides hazeState,
             LocalSongActions provides songActions,
@@ -257,6 +276,9 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
                         .glassBackdrop(hazeState)
                         .background(AppBackground),
                 ) {
+                    // Behind every page and outside their transitions, so it holds still while
+                    // tabs cross-fade over it (see HeaderWash).
+                    HeaderWash(color = { washColor }, opacity = { washOpacity })
                     Row(modifier = Modifier.fillMaxSize()) {
                         Box(modifier = Modifier.weight(1f)) {
                             AnimatedContent(
@@ -295,6 +317,7 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
                                             settings = settings,
                                             historyStore = AppGraph.searchHistoryStore,
                                             browseGenres = remember { AppGraph.musicRepository.browseTiles() },
+                                            onHeaderTint = { searchTint = it },
                                             isLiked = ::isLiked,
                                             onQueryChange = viewModel::onQueryChange,
                                             onSearch = viewModel::search,
@@ -571,6 +594,18 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
         }
     }
 }
+/**
+ * Pages under the header gradient: Search, every other tab, and the pages pushed from them. Album,
+ * artist and playlist pages are left out; they wash in their cover's colour instead.
+ */
+private fun Screen.hasHeaderWash(): Boolean = when (this) {
+    is Screen.AlbumDetail, is Screen.ArtistDetail, is Screen.PlaylistDetail -> false
+    else -> true
+}
+
+/** How long the header gradient takes to move to a new colour — as long as a cover tint's ease. */
+private const val WASH_COLOR_MS = 700
+
 /** Collapses pushed screens back to whichever sidebar tab they belong to. */
 private fun tabOf(screen: Screen): Screen = when (screen) {
     in TopLevelScreens -> screen

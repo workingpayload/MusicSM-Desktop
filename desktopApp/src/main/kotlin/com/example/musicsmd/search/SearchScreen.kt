@@ -1,11 +1,6 @@
 package com.example.musicsmd.search
 
-import com.example.musicsmd.ui.components.LocalDockInset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.geometry.Offset
-import com.example.musicsmd.ui.components.rememberDominantColorState
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.draw.drawBehind
+import com.example.musicsmd.ui.theme.ArtworkColors
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TextField
 import com.example.musicsmd.ui.components.ArtistCircle
@@ -104,6 +99,8 @@ fun SearchScreen(
     onAlbumClick: (Album) -> Unit,
     onArtistClick: (Artist) -> Unit,
     onPlaylistClick: (Playlist) -> Unit,
+    /** The top result's cover colour for the header gradient, or null for the accent. */
+    onHeaderTint: (Color?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val history by historyStore.history.collectAsState()
@@ -139,30 +136,21 @@ fun SearchScreen(
         if (!settings.searchVideos && filter == SearchFilter.VIDEOS) filter = SearchFilter.ALL
     }
 
-    // Tint the header by the top result's artwork (falls back to the accent), as on mobile.
+    // Tint the header by the top result's artwork (falls back to the accent), as on mobile. The
+    // gradient itself is drawn behind the page by the app (see HeaderWash), so Search only says
+    // which colour it should be; null means the accent.
     val firstArtwork = state.searchResults.takeIf { state.query.isNotBlank() }?.let { r ->
         r.songs.firstOrNull()?.artworkUrl
             ?: r.albums.firstOrNull()?.artworkUrl
             ?: r.artists.firstOrNull()?.artworkUrl
             ?: r.videos.firstOrNull()?.artworkUrl
     }
-    val headerAccent = rememberDominantColorState(firstArtwork, fallback = Coral)
-    val dockInset = LocalDockInset.current
+    LaunchedEffect(firstArtwork) { onHeaderTint(firstArtwork?.let { ArtworkColors.accentFor(it) }) }
 
     Column(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .drawBehind {
-                    val c = headerAccent.value
-                    // Runs under the glass dock to the window edge (see LocalDockInset).
-                    val under = dockInset.toPx()
-                    drawRect(
-                        Brush.verticalGradient(listOf(c.copy(alpha = 0.45f), Color.Transparent)),
-                        topLeft = Offset(-under, 0f),
-                        size = Size(size.width + under, size.height),
-                    )
-                }
                 .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 12.dp),
         ) {
         Text("Search", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)

@@ -69,6 +69,8 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
   = vibrant → dominant → dark vibrant → muted). As on mobile, Now Playing is tinted by the cover
   (background wash, volume bar, labels), lyrics sit on the cover's tint, album/artist/playlist
   pages wash into a deepened cover colour, and the Search header glows with the top result's cover.
+  Every other tab carries the same header gradient in the accent colour; it is drawn once behind
+  the pages (`HeaderWash`), so it holds still while tabs cross-fade and eases between colours.
   **Theme from artwork** (Settings → Appearance, on by default here, opt-in on mobile) recolours the
   whole app's accent to the current song's cover; covers without a real hue keep the stock coral,
   and very dark or pale ones are lifted so buttons and links stay readable. Tinted page backgrounds
