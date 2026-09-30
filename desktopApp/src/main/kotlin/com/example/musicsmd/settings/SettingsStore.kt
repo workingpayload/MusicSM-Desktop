@@ -40,9 +40,9 @@ data class DesktopSettings(
 
     // Appearance — mobile's "Theme from artwork"; on by default on desktop.
     val themeFromArtwork: Boolean = true,
-    // Mobile's "AMOLED black": pure black base surfaces.
-    val amoled: Boolean = false,
-    val homeLayout: HomeLayout = HomeLayout.LIST,
+    // Mobile's "AMOLED black": pure black base surfaces. On by default on desktop.
+    val amoled: Boolean = true,
+    val homeLayout: HomeLayout = HomeLayout.CARDS,
 
     // Lyrics — names of `com.example.musicsm.domain.model.LyricsSource` entries.
     val lyricsSourceOrder: List<String> = emptyList(),
@@ -64,7 +64,7 @@ data class DesktopSettings(
     val localMusicDirs: List<String> = listOf(AppPaths.defaultMusicDir.absolutePath),
 
     // Desktop
-    val minimizeToTray: Boolean = false,
+    val minimizeToTray: Boolean = true,
     val mediaKeys: Boolean = true,
 
     // Updates — a version the user said "Later" to, which isn't announced again.
