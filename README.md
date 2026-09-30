@@ -68,6 +68,11 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
 - **Desktop extras**: keyboard shortcuts (Space play/pause, Ctrl+←/→ prev/next, Shift+←/→ seek,
   Ctrl+↑/↓ volume, Ctrl+L like, Ctrl+S shuffle, Ctrl+R repeat, Esc back), global media keys
   (JNativeHook), system tray with optional minimize-to-tray.
+- **Update notice**: like mobile's update prompt, minus the self-install. An installed build checks
+  this repo's latest GitHub release a few seconds after launch and every 6 hours; when it's newer
+  than the running version, a dialog shows the release notes and sends you to
+  [music-sm.vercel.app](https://music-sm.vercel.app) to download it. "Later" skips that version.
+  `run` never checks. `-Dmusicsmd.updateFeed=<url>` points the check at another feed (for testing).
 - **Glass design** — the mobile app's `Glass.kt` ported as-is, with the same libraries and
   versions: the byte-identical dark "Stitch" palette; `GlassPanel` frosted panels via
   [Haze](https://github.com/chrisbanes/haze) 1.6.10; and **real Liquid Glass** (vibrancy, blur,
@@ -148,8 +153,9 @@ side hasn't been trimmed or tested on a Mac yet. Options:
 - `-PvlcDir=<dir>` — bundle a VLC from somewhere else (on macOS, `VLC.app/Contents/MacOS`).
 - `-PbundleVlc=false` — leave VLC out; the app then uses the VLC installed on the system.
 - `-PrequireVlc=true` — fail instead of warning when there is no VLC to bundle (used by CI).
-- `-PappVersion=1.2.3` — the installer version (default `1.0.0`). It must be plain numbers, and
-  the first one must be at least 1 for the DMG.
+- `-PappVersion=1.2.3` — the version (default `1.0.0`), for the installer and the app itself
+  (Settings → About, and the update notice's comparison). It must be plain numbers, and the first
+  one must be at least 1 for the DMG.
 
 ## Releases
 
@@ -167,7 +173,8 @@ git push origin v1.0.0
 
 The tag sets the version (`v1.2.3` → 1.2.3; `v1.2.3-beta` → 1.2.3, published as a pre-release).
 **Run workflow** on the Actions tab builds the installers without a Release (they're attached to
-the run as artifacts).
+the run as artifacts). Installed copies notice a new (non-pre-release) Release on their own and
+point their users to the download page.
 
 The MusicSM download page (`web/` in the MusicSM repo) adds these installers' downloads to its
 GitHub total. It reads the public releases of `workingpayload/MusicSM-Desktop`, so keep the repo

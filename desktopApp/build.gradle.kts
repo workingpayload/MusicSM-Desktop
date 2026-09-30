@@ -52,6 +52,33 @@ dependencies {
     testImplementation(libs.junit)
 }
 
+// ---- App version ------------------------------------------------------------------------------
+// One number for the installers and the app itself (Settings > About, the new-version check):
+// -PappVersion, which the release workflow sets from the git tag (v1.2.3 -> 1.2.3).
+val appVersion: String = providers.gradleProperty("appVersion").getOrElse("1.0.0")
+
+abstract class GenerateAppVersion : DefaultTask() {
+    @get:Input
+    abstract val version: Property<String>
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val file = outputDir.file("com/example/musicsmd/app-version.txt").get().asFile
+        file.parentFile.mkdirs()
+        file.writeText(version.get())
+    }
+}
+
+val generateAppVersion = tasks.register<GenerateAppVersion>("generateAppVersion") {
+    version.set(appVersion)
+    outputDir.set(layout.buildDirectory.dir("generated/app-version"))
+}
+
+sourceSets.main { resources.srcDir(generateAppVersion) }
+
 // ---- Bundled libVLC ---------------------------------------------------------------------------
 // Playback goes through libVLC, so the installers carry it: nobody has to install VLC first. The
 // files come from the VLC installed on the build machine (on CI, the release workflow installs
@@ -165,8 +192,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Dmg)
             packageName = "MusicSM Desktop"
-            // Set by the release workflow from the git tag (v1.2.3 -> 1.2.3).
-            packageVersion = providers.gradleProperty("appVersion").getOrElse("1.0.0")
+            packageVersion = appVersion
             // libVLC, from prepareBundledVlc: lands in the app's resources dir, where
             // BundledVlcDirectoryProvider points vlcj at it.
             appResourcesRootDir.set(prepareBundledVlc.flatMap { it.outputDir })

@@ -110,6 +110,7 @@ import com.example.musicsmd.ui.theme.Coral
 import com.example.musicsmd.ui.theme.DarkPalette
 import com.example.musicsmd.ui.theme.MusicSMTheme
 import com.example.musicsmd.ui.theme.asThemeAccent
+import com.example.musicsmd.update.UpdateDialog
 import com.example.musicsmd.desktop.WindowChrome
 import com.example.musicsmd.ui.components.LocalDockInset
 import com.kyant.backdrop.backdrops.layerBackdrop
@@ -202,6 +203,7 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
     val lyricsOffsetMs by lyricsController.offsetMs.collectAsState()
     val settings by AppGraph.settingsStore.settings.collectAsState()
     val downloadedSongs by AppGraph.downloadManager.downloads().collectAsState(initial = emptyList())
+    val newRelease by AppGraph.updateNotifier.available.collectAsState()
     val coroutineScope = rememberCoroutineScope()
     // Per-screen saved state (scroll positions), so going back lands where you left, as on mobile.
     val saveableStates = rememberSaveableStateHolder()
@@ -690,6 +692,16 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
                     PlaylistShareDialog(playlist = playlist, onDismiss = { sharePlaylist = null })
                 }
 
+                newRelease?.let { release ->
+                    val updates = AppGraph.updateNotifier
+                    UpdateDialog(
+                        release = release,
+                        onDownload = updates::openDownloadPage,
+                        onLater = { updates.later(release) },
+                        onClose = updates::close,
+                    )
+                }
+
                 // Full-screen player — composed over everything, so the screen behind keeps its
                 // state (scroll position, search results) while the player is open. Slides up from
                 // the mini player and back down, as mobile's sheet does; the offset is read in the
@@ -750,6 +762,7 @@ fun main() {
         settingsStore = AppGraph.settingsStore,
     )
     val mediaKeys = MediaKeyController(AppGraph.settingsStore, viewModel).also { it.start() }
+    AppGraph.updateNotifier.start()
 
     application {
         val playback by viewModel.playback.collectAsState()

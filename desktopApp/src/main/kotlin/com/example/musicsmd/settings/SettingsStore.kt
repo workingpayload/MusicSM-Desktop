@@ -66,6 +66,9 @@ data class DesktopSettings(
     // Desktop
     val minimizeToTray: Boolean = false,
     val mediaKeys: Boolean = true,
+
+    // Updates — a version the user said "Later" to, which isn't announced again.
+    val dismissedUpdateVersion: String? = null,
 )
 
 /** Observable, file-backed settings. Writes are synchronous and tiny, so no debouncing. */

@@ -37,6 +37,8 @@ import com.example.musicsmd.playback.PlayerController
 import com.example.musicsmd.search.SearchHistoryStore
 import com.example.musicsmd.settings.SettingsStore
 import com.example.musicsmd.stats.FileStatsRepository
+import com.example.musicsmd.update.UpdateChecker
+import com.example.musicsmd.update.UpdateNotifier
 import com.example.musicsm.domain.repository.StatsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -104,6 +106,12 @@ object AppGraph {
     val playbackListeners: List<PlaybackListener> by lazy { listOf(fileStatsRepository) }
 
     val playerController: PlayerController by lazy { PlayerController() }
+
+    /** Announces new MusicSM Desktop releases (mobile's update prompt, without the self-install). */
+    val updateNotifier: UpdateNotifier by lazy {
+        val checker = UpdateChecker(okHttpClient)
+        UpdateNotifier(newerRelease = checker::newerRelease, settingsStore = settingsStore, scope = appScope)
+    }
 
     /** Must run once before any [musicSource] call — mirrors `MusicSmApp.onCreate`. */
     fun init() {

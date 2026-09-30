@@ -49,6 +49,7 @@ import com.example.musicsmd.ui.theme.Coral
 import com.example.musicsmd.ui.theme.GlassFill
 import com.example.musicsmd.ui.theme.GlassFillStrong
 import com.example.musicsmd.ui.theme.OnAccent
+import com.example.musicsmd.update.AppVersion
 import java.awt.Desktop
 import javax.swing.JFileChooser
 import kotlinx.coroutines.launch
@@ -243,7 +244,7 @@ fun SettingsScreen(
         item { SectionTitle("About") }
         item {
             SettingsCard {
-                SettingsRow("MusicSM Desktop", "Version 1.0.0", onClick = null)
+                SettingsRow("MusicSM Desktop", "Version ${AppVersion.current}", onClick = null)
                 SettingsRow("Desktop port of MusicSM", "Kotlin + Compose Multiplatform, glass design, YouTube Music catalog.", onClick = null)
             }
         }
