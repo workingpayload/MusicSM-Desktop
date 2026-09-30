@@ -280,11 +280,15 @@ private fun LyricsLines(
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         itemsIndexed(lyrics.lines) { index, line ->
+            val isActive = index == activeIndex
             LyricsLine(
                 line = line,
                 isSynced = lyrics.synced,
-                isActive = index == activeIndex,
-                syncedPositionMs = syncedPositionMs,
+                isActive = isActive,
+                // Only the line being sung reads the position (its word-by-word highlight). The
+                // position changes every frame, so handing it to every line would rebuild each
+                // visible line, blur layer and all, on every frame.
+                syncedPositionMs = if (isActive) syncedPositionMs else 0L,
                 offsetMs = offsetMs,
                 onSeekMs = onSeekMs,
             )

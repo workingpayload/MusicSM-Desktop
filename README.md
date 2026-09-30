@@ -45,7 +45,12 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
   cross-fade, and the queue panel slides in. Going back keeps a page's scroll position and filters.
   The seek bar and word-synced lyrics are interpolated per frame between libVLC's position ticks
   (`SmoothPosition.kt`), and playback position lives in its own flow, so the rest of the app doesn't
-  recompose several times a second while music plays.
+  recompose several times a second while music plays; only the lyric line being sung reads it.
+  The first open of Now Playing in a session used to stutter for a few hundred ms while the GPU
+  compiled its blur, glass and lyric-line shaders mid-slide. So once there is a song, at the first
+  moment the mouse and keyboard have been still for 2 s, Now Playing (with its lyrics panel) is
+  drawn once underneath the app, which is a hair short of opaque for that ~1.5 s. The one-off stall
+  lands while nothing moves, and the first real open is as smooth as later ones.
 - **Synced lyrics**: the mobile lyrics stack (Apple Music, BiniLyrics, LyricsPlus, SimpMusic,
   LRCLIB, KuGou, Unison, YouTube Music) with word-by-word highlighting, click-to-seek and per-song
   sync offset, shown beside the artwork in Now Playing. The panel opens on its own when a song has

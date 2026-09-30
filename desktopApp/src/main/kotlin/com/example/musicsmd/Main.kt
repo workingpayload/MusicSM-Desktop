@@ -47,6 +47,8 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -58,6 +60,9 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import java.awt.GraphicsEnvironment
+import com.example.musicsm.domain.model.LyricLine
+import com.example.musicsm.domain.model.LyricWord
+import com.example.musicsm.domain.model.Lyrics
 import com.example.musicsm.domain.model.Playlist
 import com.example.musicsm.domain.model.Song
 import com.example.musicsmd.audio.EqualizerScreen
@@ -71,6 +76,7 @@ import com.example.musicsmd.importer.ImportScreen
 import com.example.musicsmd.library.LibraryScreen
 import com.example.musicsmd.local.LocalMusicScreen
 import com.example.musicsmd.lyrics.LyricsController
+import com.example.musicsmd.lyrics.LyricsUiState
 import com.example.musicsmd.nav.Screen
 import com.example.musicsmd.nav.TopLevelScreens
 import com.example.musicsmd.player.AppUiState
@@ -125,6 +131,41 @@ private const val NAV_TRANSITION_MS = 300
 
 /** The single-image window icon Compose sets before the full size set replaces it. */
 private const val WINDOW_ICON_FALLBACK_SIZE = 64
+
+/** Lets the first song's own loading settle before Now Playing is warmed up behind the scenes. */
+private const val NOW_PLAYING_WARMUP_DELAY_MS = 1_000L
+
+/** How long the mouse and keyboard must have been still before the warm-up's stall is risked. */
+private const val NOW_PLAYING_WARMUP_IDLE_NANOS = 2_000_000_000L
+private const val NOW_PLAYING_WARMUP_POLL_MS = 250L
+
+/** Long enough for the cover to load and every part of the player to have been drawn once. */
+private const val NOW_PLAYING_WARMUP_MS = 1_500L
+
+/**
+ * The app's background opacity while Now Playing warms up beneath it: not opaque, so the GPU has
+ * to draw what's under it, yet it lets through 0.5% of it, well below what anyone can see.
+ */
+private const val WARM_UP_COVER_ALPHA = 0.995f
+
+/** A sub-pixel sheet offset, so the warm-up draws the player the way a slide mid-way does. */
+private const val WARM_UP_SHEET_OFFSET_PX = 0.5f
+
+/** Stand-in lyrics for the warm-up when the song has none, so the lyric lines get drawn once too. */
+private val WarmUpLyrics = LyricsUiState.Loaded(
+    songId = "warm-up",
+    lyrics = Lyrics(
+        synced = true,
+        lines = listOf(
+            LyricLine(timeMs = 0L, text = "Warming up the lyrics", words = listOf(
+                LyricWord(startMs = 0L, endMs = 60_000L, charStart = 0, charEnd = 7),
+                LyricWord(startMs = 60_000L, endMs = 120_000L, charStart = 8, charEnd = 21),
+            )),
+            LyricLine(timeMs = 120_000L, text = "so the first open is smooth"),
+            LyricLine(timeMs = 240_000L, text = "and nobody ever sees these lines"),
+        ),
+    ),
+)
 
 /** Mobile's player sheet spring. */
 private val SheetSpring = spring<Float>(
@@ -247,6 +288,31 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
         // Derived, so the root recomposes when the sheet appears or goes, not on every frame.
         val sheetShown by remember { derivedStateOf { sheet.value > 0.001f } }
 
+        // Now Playing's first open in a session did all its one-time work in the middle of the
+        // slide: loading its code, laying out its text, decoding the big cover and, above all,
+        // compiling the GPU shaders for its blurs, glass and lyric lines. The slide stuttered for
+        // a few hundred ms. So it is drawn once beforehand, unseen (see the warm-up below), at the
+        // first quiet moment after there is a song; the stall of that first draw is then spent
+        // while nothing on screen moves.
+        var nowPlayingWarmed by remember { mutableStateOf(false) }
+        var warmingNowPlaying by remember { mutableStateOf(false) }
+        // Last mouse or key activity; plain (not state), so recording it never recomposes anything.
+        val lastInteractionNanos = remember { longArrayOf(System.nanoTime()) }
+        LaunchedEffect(hasSong, nowPlayingWarmed) {
+            if (!hasSong || nowPlayingWarmed) return@LaunchedEffect
+            delay(NOW_PLAYING_WARMUP_DELAY_MS)
+            while (System.nanoTime() - lastInteractionNanos[0] < NOW_PLAYING_WARMUP_IDLE_NANOS) {
+                delay(NOW_PLAYING_WARMUP_POLL_MS)
+            }
+            warmingNowPlaying = true
+            try {
+                delay(NOW_PLAYING_WARMUP_MS)
+            } finally {
+                warmingNowPlaying = false
+            }
+            nowPlayingWarmed = true
+        }
+
         // The header gradient: Search's top-result colour on Search, the accent on every other
         // tab, faded out on detail pages, which wash in their own cover's colour.
         val washColor by animateColorAsState(
@@ -267,7 +333,84 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
             LocalDockInset provides dockSpace,
             LocalContentColor provides MaterialTheme.colorScheme.onSurface,
         ) {
-            Box(modifier = Modifier.fillMaxSize().background(AppBackground)) {
+            val nowPlaying: @Composable (showLyrics: Boolean, lyrics: LyricsUiState) -> Unit = { showLyrics, lyrics ->
+                NowPlayingScreen(
+                    state = playback,
+                    position = viewModel.position,
+                    onCollapse = { viewModel.setExpanded(false) },
+                    onTogglePlayPause = viewModel::togglePlayPause,
+                    onNext = viewModel::playNextInQueue,
+                    onPrevious = viewModel::playPreviousInQueue,
+                    onSeek = viewModel::seekTo,
+                    onToggleLike = viewModel::toggleLikeCurrent,
+                    onVolumeChange = viewModel::setVolume,
+                    onToggleQueue = {
+                        viewModel.setExpanded(false)
+                        viewModel.setQueueVisible(true)
+                    },
+                    onToggleShuffle = viewModel::toggleShuffle,
+                    onCycleRepeat = viewModel::cycleRepeat,
+                    onPlaybackSpeedChange = viewModel::setPlaybackSpeed,
+                    onStartSleepTimer = viewModel::startSleepTimer,
+                    onStartSleepTimerAtEndOfTrack = viewModel::startSleepTimerAtEndOfTrack,
+                    onCancelSleepTimer = viewModel::cancelSleepTimer,
+                    onRefreshAudioOutputs = viewModel::refreshAudioOutputs,
+                    onSelectAudioOutput = viewModel::selectAudioOutput,
+                    onOpenEqualizer = {
+                        viewModel.setExpanded(false)
+                        viewModel.navigateTo(Screen.Equalizer)
+                    },
+                    showLyrics = showLyrics,
+                    lyricsState = lyrics,
+                    lyricsOffsetMs = lyricsOffsetMs,
+                    onToggleLyrics = lyricsController::toggleVisible,
+                    onCloseLyrics = { lyricsController.setVisible(false) },
+                    onAdjustLyricsOffset = lyricsController::adjustOffset,
+                    onSetLyricsOffset = lyricsController::setOffset,
+                    onResetLyricsOffset = lyricsController::resetOffset,
+                )
+            }
+            val warmUp = warmingNowPlaying && hasSong && !sheetOpen && !sheetShown
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(AppBackground)
+                    // Watches (never consumes) every pointer and key event, to find quiet moments.
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                awaitPointerEvent(PointerEventPass.Initial)
+                                lastInteractionNanos[0] = System.nanoTime()
+                            }
+                        }
+                    }
+                    .onPreviewKeyEvent {
+                        lastInteractionNanos[0] = System.nanoTime()
+                        false
+                    },
+            ) {
+                if (warmUp) {
+                    // Now Playing's warm-up: drawn for real, but underneath the app, whose
+                    // background is a hair short of opaque meanwhile (an opaque full-window fill
+                    // lets the GPU drop everything beneath it undrawn, shaders and all). Always
+                    // with the lyrics panel, sample lines if the song has none, as those need
+                    // shaders of their own. Clicks that reach it are swallowed. Its layer is
+                    // offset by a fraction of a pixel, like the sheet partway through its slide.
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { translationY = WARM_UP_SHEET_OFFSET_PX }
+                            .pointerInput(Unit) {
+                                awaitPointerEventScope {
+                                    while (true) {
+                                        awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                                    }
+                                }
+                            },
+                    ) {
+                        nowPlaying(true, lyricsState as? LyricsUiState.Loaded ?: WarmUpLyrics)
+                    }
+                }
                 // Content fills the whole window and registers as both glass sources. The background
                 // is painted *inside* the source node — after glassBackdrop, so hazeSource records
                 // it — because a source with no opaque fill of its own lets the glass sample
@@ -278,7 +421,7 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
                         .fillMaxSize()
                         .layerBackdrop(liquidBackdrop)
                         .glassBackdrop(hazeState)
-                        .background(AppBackground),
+                        .background(if (warmUp) AppBackground.copy(alpha = WARM_UP_COVER_ALPHA) else AppBackground),
                 ) {
                     // Behind every page and outside their transitions, so it holds still while
                     // tabs cross-fade over it (see HeaderWash).
@@ -491,8 +634,13 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
                                 .fillMaxWidth()
                                 .padding(start = dockSpace)
                                 .onSizeChanged { barHeight = with(density) { it.height.toDp() } }
-                                // Fades out as the player sheet rises over it, as on mobile.
-                                .graphicsLayer { alpha = (1f - sheet.value * 1.5f).coerceIn(0f, 1f) },
+                                // Fades out as the player sheet rises over it, as on mobile. During
+                                // Now Playing's warm-up it is a hair translucent, so its glass is
+                                // drawn the way a fade draws it, once, before the first real open.
+                                .graphicsLayer {
+                                    val fade = (1f - sheet.value * 1.5f).coerceIn(0f, 1f)
+                                    alpha = if (warmUp) minOf(fade, WARM_UP_COVER_ALPHA) else fade
+                                },
                             contentAlignment = Alignment.BottomCenter,
                         ) {
                             PlayerBar(
@@ -557,41 +705,7 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
                             // Taps on the player's empty areas must not fall through to the screen behind.
                             .pointerInput(Unit) { detectTapGestures {} },
                     ) {
-                        NowPlayingScreen(
-                            state = playback,
-                            position = viewModel.position,
-                            onCollapse = { viewModel.setExpanded(false) },
-                            onTogglePlayPause = viewModel::togglePlayPause,
-                            onNext = viewModel::playNextInQueue,
-                            onPrevious = viewModel::playPreviousInQueue,
-                            onSeek = viewModel::seekTo,
-                            onToggleLike = viewModel::toggleLikeCurrent,
-                            onVolumeChange = viewModel::setVolume,
-                            onToggleQueue = {
-                                viewModel.setExpanded(false)
-                                viewModel.setQueueVisible(true)
-                            },
-                            onToggleShuffle = viewModel::toggleShuffle,
-                            onCycleRepeat = viewModel::cycleRepeat,
-                            onPlaybackSpeedChange = viewModel::setPlaybackSpeed,
-                            onStartSleepTimer = viewModel::startSleepTimer,
-                            onStartSleepTimerAtEndOfTrack = viewModel::startSleepTimerAtEndOfTrack,
-                            onCancelSleepTimer = viewModel::cancelSleepTimer,
-                            onRefreshAudioOutputs = viewModel::refreshAudioOutputs,
-                            onSelectAudioOutput = viewModel::selectAudioOutput,
-                            onOpenEqualizer = {
-                                viewModel.setExpanded(false)
-                                viewModel.navigateTo(Screen.Equalizer)
-                            },
-                            showLyrics = lyricsVisible,
-                            lyricsState = lyricsState,
-                            lyricsOffsetMs = lyricsOffsetMs,
-                            onToggleLyrics = lyricsController::toggleVisible,
-                            onCloseLyrics = { lyricsController.setVisible(false) },
-                            onAdjustLyricsOffset = lyricsController::adjustOffset,
-                            onSetLyricsOffset = lyricsController::setOffset,
-                            onResetLyricsOffset = lyricsController::resetOffset,
-                        )
+                        nowPlaying(lyricsVisible, lyricsState)
                     }
                 }
             }
