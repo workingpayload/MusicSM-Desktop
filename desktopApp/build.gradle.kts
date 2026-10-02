@@ -98,10 +98,11 @@ val vlcInstall: File? = (
         }
     )?.takeIf { it.isDirectory }
 
-/** Windows plugin folders an audio player needs; video, GUI, subtitles and streaming-out are left out. */
+/** Audio playback plus software video decoding/conversion for motion covers; GUI and streaming-out stay out. */
 val vlcPluginFolders = listOf(
     "access", "audio_filter", "audio_mixer", "audio_output", "codec", "demux", "keystore", "logger",
-    "meta_engine", "misc", "packetizer", "stream_extractor", "stream_filter",
+    "meta_engine", "misc", "packetizer", "stream_extractor", "stream_filter", "video_chroma", "video_filter",
+    "d3d11", "d3d9",
 )
 
 /** Big plugins inside those folders that only video, discs or network protocols the app never uses need. */
@@ -170,6 +171,12 @@ val prepareBundledVlc = tasks.register<PrepareBundledVlc>("prepareBundledVlc") {
                 fileTree(install) {
                     include("libvlc.dll", "libvlccore.dll")
                     vlcPluginFolders.forEach { include("plugins/$it/**") }
+                    include(
+                        "plugins/video_output/libvmem_plugin.dll",
+                        "plugins/video_output/libvdummy_plugin.dll",
+                        "plugins/video_output/libdrawable_plugin.dll",
+                    )
+                    include("plugins/spu/libmarq_plugin.dll", "plugins/spu/liblogo_plugin.dll")
                     vlcPluginsLeftOut.forEach { exclude("plugins/**/${it}_plugin.dll") }
                     // The Blu-ray menus' Java helpers, left behind by the Blu-ray plugin above.
                     exclude("plugins/**/*.jar")

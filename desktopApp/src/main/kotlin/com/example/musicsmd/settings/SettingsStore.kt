@@ -43,6 +43,9 @@ data class DesktopSettings(
     // Mobile's "AMOLED black": pure black base surfaces. On by default on desktop.
     val amoled: Boolean = true,
     val homeLayout: HomeLayout = HomeLayout.CARDS,
+    val animatedArtwork: Boolean = true,
+    val animatedArtworkStyle: String = "FULL_SCREEN",
+    val animatedArtworkSource: String = "AUTO",
 
     // Lyrics — names of `com.example.musicsm.domain.model.LyricsSource` entries.
     val lyricsSourceOrder: List<String> = emptyList(),

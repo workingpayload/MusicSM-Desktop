@@ -1,6 +1,7 @@
 package com.example.motionart.internal
 
 import com.example.motionart.MotionArt
+import kotlinx.coroutines.CancellationException
 
 /** What the orchestrator knows about a track when it goes looking for a cover video. */
 internal data class TrackQuery(
@@ -12,9 +13,19 @@ internal data class TrackQuery(
 /**
  * One catalogue or manifest that may hold a motion cover.
  *
- * Implementations never throw for a miss or for a transport failure — both mean "nothing here",
- * and the orchestrator simply moves on to the next source.
+ * A miss or logged transport failure means "nothing here", so the orchestrator moves on to the
+ * next source. Coroutine cancellation is not a miss and must propagate.
  */
 internal interface MotionArtProviderClient {
     suspend fun lookup(query: TrackQuery): MotionArt?
 }
+
+internal suspend fun <T> providerRequest(provider: String, request: suspend () -> T): T? =
+    try {
+        request()
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Exception) {
+        System.err.println("Animated artwork $provider request failed: ${error.javaClass.simpleName}")
+        null
+    }

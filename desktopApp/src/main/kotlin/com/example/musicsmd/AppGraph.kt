@@ -5,6 +5,8 @@ import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.example.innertube.InnerTube
+import com.example.motionart.MotionArtSource
+import com.example.musicsmd.motionart.DesktopMotionArtRepository
 import com.example.musicsm.data.applemusic.AppleMusicPublicClient
 import com.example.musicsm.data.repository.MusicRepositoryImpl
 import com.example.musicsm.data.repository.PlaylistImportRepositoryImpl
@@ -69,6 +71,17 @@ object AppGraph {
     val searchHistoryStore: SearchHistoryStore by lazy { SearchHistoryStore() }
 
     val musicRepository: MusicRepository by lazy { MusicRepositoryImpl(musicSource) }
+
+    private val motionArtSource = lazy { MotionArtSource() }
+    val motionArtRepository: DesktopMotionArtRepository by lazy {
+        DesktopMotionArtRepository(lookup = { song, provider ->
+            motionArtSource.value.lookup(song.artist, song.title, song.album, provider)
+        })
+    }
+
+    fun closeMotionArt() {
+        if (motionArtSource.isInitialized()) motionArtSource.value.close()
+    }
 
     val playlistImportRepository: PlaylistImportRepository by lazy {
         PlaylistImportRepositoryImpl(

@@ -86,7 +86,7 @@ internal class AppleProvider(
      */
     private suspend fun albums(term: String, retryOnAuthFailure: Boolean): List<AlbumItem>? {
         val bearer = token() ?: return null
-        val response = runCatching {
+        val body = providerRequest("Apple") {
             client.get("$CATALOG_URL/$storefront/search") {
                 header("Authorization", "Bearer $bearer")
                 header("Origin", ORIGIN)
@@ -97,7 +97,7 @@ internal class AppleProvider(
                 parameter("extend", "editorialVideo")
             }.body<SearchResponse>()
         }
-        val body = response.getOrElse {
+        if (body == null) {
             if (!retryOnAuthFailure) return null
             invalidateToken(bearer)
             return albums(term, retryOnAuthFailure = false)
@@ -111,7 +111,7 @@ internal class AppleProvider(
         return tokenLock.withLock {
             val current = token
             if (current != null && nowSeconds() < tokenExpiresAt) return@withLock current
-            val scraped = runCatching { scrapeToken() }.getOrNull()
+            val scraped = providerRequest("Apple token") { scrapeToken() }
             if (scraped != null) {
                 token = scraped
                 // Retire it early so a request is never sent with a credential about to lapse.

@@ -67,15 +67,15 @@ class PlayerController {
         paused: Boolean = false,
     ) {
         awaitingAudio = !paused
-        if (paused) mediaPlayer.media().play(stream.url, ":start-paused") else mediaPlayer.media().play(stream.url)
+        val options = buildList {
+            if (paused) add(":start-paused")
+            // Opened at the position, rather than played from 0:00 and sought a moment later,
+            // which was heard as a stutter.
+            if (startPositionMs > 0L) add(":start-time=${startPositionMs / 1000.0}")
+        }
+        mediaPlayer.media().play(stream.url, *options.toTypedArray())
         setPlaybackSpeed(rate)
         outputDeviceId?.let(::setOutputDevice)
-        if (startPositionMs > 0L) {
-            mediaPlayer.submit {
-                Thread.sleep(350)
-                mediaPlayer.controls().setTime(startPositionMs)
-            }
-        }
     }
 
     fun pause() = mediaPlayer.controls().setPause(true)

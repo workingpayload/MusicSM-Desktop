@@ -13,6 +13,9 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import java.util.Locale
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import com.example.motionart.internal.providerRequest
 
 /**
  * Finds the short looping video some releases ship alongside their cover art.
@@ -22,9 +25,9 @@ import java.util.Locale
  * answer wins: the common case costs a single request, and the cost only grows for the tracks
  * nobody has animated, which is exactly where the extra effort is worth spending.
  *
- * Every entry point returns null quickly and quietly. A miss is the normal outcome, not an error,
- * and neither a miss nor a transport failure should ever be visible to a listener — the still
- * cover simply stays on screen.
+ * A miss is normal and returns null. Transport failures are logged before trying another source;
+ * the listener keeps seeing the still cover. Cancellation propagates so closing the player stops
+ * outstanding requests.
  */
 class MotionArtSource(
     private val locale: Locale = Locale.getDefault(),
@@ -85,9 +88,12 @@ class MotionArtSource(
         } else {
             listOf(preferred)
         }
-        return order.firstNotNullOfOrNull { provider ->
-            runCatching { clients[provider]?.lookup(query) }.getOrNull()
+        for (provider in order) {
+            currentCoroutineContext().ensureActive()
+            val art = providerRequest(provider.name) { clients[provider]?.lookup(query) }
+            if (art != null) return art
         }
+        return null
     }
 
     fun close() = client.close()

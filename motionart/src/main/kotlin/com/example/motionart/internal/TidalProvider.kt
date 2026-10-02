@@ -36,7 +36,7 @@ internal class TidalProvider(
             query.title,
         ).joinToString(" ")
 
-        val response = runCatching {
+        val response = providerRequest("TIDAL") {
             client.get(SEARCH_URL) {
                 header("X-Tidal-Token", EMBED_TOKEN)
                 parameter("query", term)
@@ -44,7 +44,7 @@ internal class TidalProvider(
                 parameter("types", "TRACKS")
                 parameter("countryCode", countryCode)
             }.body<TidalSearchResponse>()
-        }.getOrNull() ?: return null
+        } ?: return null
 
         // A track title is far from unique — the same name comes back for covers, remixes and lofi
         // re-recordings — so the artist has to agree before a cover id is accepted.

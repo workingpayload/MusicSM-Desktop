@@ -5,6 +5,11 @@ from YouTube Music (InnerTube) and audio via NewPipeExtractor. Built with **Kotl
 Multiplatform for Desktop** so the domain and data layers are shared verbatim with the mobile
 app; only the UI shell and playback engine are desktop-specific.
 
+## Privacy
+
+See the [MusicSM Desktop Privacy Policy](PRIVACY-POLICY.md) for local data storage,
+third-party service requests, and data deletion instructions.
+
 ## Status
 
 Feature parity with the mobile app, minus Android-only pieces (see bottom of list):
@@ -43,8 +48,9 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
   equalizer; the output picker and sleep timer open as mobile's Liquid Glass sheet. Autoplay radio
   continues with related tracks when the queue ends; the queue (paused) and volume are restored on
   launch. As on mobile, the next track's stream URL is looked up ahead of time, so skipping starts
-  almost at once; the old track stops the moment you switch, and the play button shows a spinner
-  while a new track loads.
+  almost at once. Switching to a song that wasn't looked up ahead keeps the current one playing
+  (the play button shows a spinner) until the new stream is ready, so there's no silent gap; a
+  restored queue resumes directly at its saved position.
 - **Motion**: mobile's transitions — Now Playing slides up from the mini player on a spring (the
   pill fades under it), pushed pages slide in from the right and back out the other way, dock tabs
   cross-fade, and the queue panel slides in. Going back keeps a page's scroll position and filters.
@@ -56,6 +62,16 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
   moment the mouse and keyboard have been still for 2 s, Now Playing (with its lyrics panel) is
   drawn once underneath the app, which is a hair short of opaque for that ~1.5 s. The one-off stall
   lands while nothing moves, and the first real open is as smooth as later ones.
+- **Animated album art**: silent, looping release artwork in Now Playing, using the same
+  Apple Music / TIDAL / Vivi lookup stack as mobile. Settings → Animated artwork offers
+  **Card / Full screen** styles and **Auto / Apple / TIDAL / Vivi** sources. Enabled by
+  default with Full screen and Auto; unlike mobile's unmetered-only default, desktop may use
+  any internet connection, including metered ones. Lookups start only while Now Playing is
+  open in a visible, non-minimized window. Loops pause with the music, and their video player
+  is released when the screen closes or the window is hidden/minimized. Still artwork remains
+  until a video frame arrives and returns if playback fails. Lookups cache both hits and
+  misses, with expiry so signed URLs can refresh. Video frames render through Compose rather
+  than a separate native window, preserving glass, clipping and overlays.
 - **Synced lyrics**: the mobile lyrics stack (Apple Music, BiniLyrics, LyricsPlus, SimpMusic,
   LRCLIB, KuGou, Unison, YouTube Music) with word-by-word highlighting, click-to-seek and per-song
   sync offset, shown beside the artwork in Now Playing. The panel opens on its own when a song has
@@ -66,7 +82,8 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
   listening-clock charts per range.
 - **Settings**: playback, search, lyrics source order/toggles, audio, folders, desktop, data.
 - **Desktop extras**: keyboard shortcuts (Space play/pause, Ctrl+←/→ prev/next, Shift+←/→ seek,
-  Ctrl+↑/↓ volume, Ctrl+L like, Ctrl+S shuffle, Ctrl+R repeat, Esc back), global media keys
+  Ctrl+↑/↓ volume, Ctrl+L like, Ctrl+S shuffle, Ctrl+R repeat, Esc back; all but Esc are ignored
+  while typing in a text field, so a space in a search doesn't pause the music), global media keys
   (JNativeHook), system tray with optional minimize-to-tray.
 - **Update notice**: like mobile's update prompt, minus the self-install. An installed build checks
   this repo's latest GitHub release a few seconds after launch and every 6 hours; when it's newer
@@ -99,7 +116,7 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
   Android shows it: every size in `resources/icons` for the title bar, taskbar, Alt+Tab and tray
   (`AppIcon.kt`), and `desktopApp/icons/icon.ico` / `.icns` / `.png` for the installers.
 
-Not ported (Android-only or heavy): crossfade / DJ mix, animated motion artwork, Wear OS / widget
+Not ported (Android-only or heavy): crossfade / DJ mix, Wear OS / widget
 / Quick Settings tile, in-app updater.
 
 All app data lives in `~/.musicsm-desktop/` (`settings.json`, `library.json`, `stats.json`,
@@ -110,7 +127,7 @@ All app data lives in `~/.musicsm-desktop/` (`settings.json`, `library.json`, `s
 | Module | Role |
 |--------|------|
 | `:innertube` | Copied verbatim from the mobile app — YouTube Music InnerTube client. Plain JVM already. |
-| `:motionart` | Copied verbatim — animated cover-art lookup. Plain JVM already. |
+| `:motionart` | Shared animated cover-art lookup; desktop requests preserve coroutine cancellation and log transport failures. Plain JVM. |
 | `:domain` | Copied verbatim from the mobile app's `domain/` package — models, repository interfaces, recommend/match/share logic. Pure Kotlin, zero UI/platform deps. |
 | `:data` | The mobile app's `data/source/youtube` package (YouTubeMusicSource, NewPipeMusicSource, stream selection), plus the lyrics providers/repository and playlist-import clients (Spotify, Apple Music, YouTube). Android APIs swapped for JVM ones (`Log` → `println`, `android.util.Xml` → kXML2, `android.util.Base64` → `java.util.Base64`, `AppPreferences` → `LyricsPreferences`). Unit tests ported alongside. |
 | `:desktopApp` | Compose Desktop UI, manual DI (`AppGraph`), and playback via [vlcj](https://github.com/caprica/vlcj) (libVLC bindings) — the desktop equivalent of the mobile app's Media3/ExoPlayer bridge. |
@@ -147,7 +164,8 @@ The installer lands in `desktopApp\build\compose\binaries\main\msi\` and adds a 
 **Bundled VLC.** `prepareBundledVlc` copies libVLC from the build machine's VLC install
 (`C:\Program Files\VideoLAN\VLC`, or `/Applications/VLC.app` on macOS) into the app's resources, and
 `BundledVlcDirectoryProvider` points vlcj at that copy at run time. On Windows only the audio-player
-parts are taken (~44 MB of VLC's ~180 MB); on macOS the whole library and plugin set goes, as that
+and motion-cover decoding/conversion parts are taken (~51 MB of VLC's ~180 MB), including the
+memory video-output plugin; on macOS the whole library and plugin set goes, as that
 side hasn't been trimmed or tested on a Mac yet. Options:
 
 - `-PvlcDir=<dir>` — bundle a VLC from somewhere else (on macOS, `VLC.app/Contents/MacOS`).
@@ -156,6 +174,19 @@ side hasn't been trimmed or tested on a Mac yet. Options:
 - `-PappVersion=1.2.3` — the version (default `1.0.0`), for the installer and the app itself
   (Settings → About, and the update notice's comparison). It must be plain numbers, and the first
   one must be at least 1 for the DMG.
+
+### Animated-artwork tests
+
+Run `.\gradlew.bat :desktopApp:test :motionart:test` for settings, lookup/cache, cancellation,
+and frame-layout tests. Native MP4/HLS smoke tests are opt-in: set `MUSICSM_TEST_MP4` and
+`MUSICSM_TEST_HLS` to local one-second, 64×64 test videos (an MP4 and a finite HLS playlist),
+and `MUSICSM_TEST_VLC_RESOURCES` to the absolute path of
+`desktopApp\build\bundled-vlc\windows` after running `:desktopApp:prepareBundledVlc`.
+Then run `.\gradlew.bat :desktopApp:test --tests "com.example.musicsmd.motionart.*"`.
+These tests exercise the bundled codecs, loop playback, frame conversion, pause/resume,
+silent playback, and native resource release without contacting a music service. Add
+`MUSICSM_TEST_REMOTE_ART=true` to also check a real catalog lookup and decode its returned
+video; that additional test needs internet access and depends on provider availability.
 
 ## Releases
 

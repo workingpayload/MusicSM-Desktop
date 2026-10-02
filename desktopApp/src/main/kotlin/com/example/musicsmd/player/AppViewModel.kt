@@ -27,7 +27,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
@@ -677,13 +677,11 @@ class AppViewModel(
     }
 
     private suspend fun resolveAndPlay(song: Song, request: Long) = coroutineScope {
-        val lookup = async(Dispatchers.IO) {
+        // The current track keeps playing while the new stream is looked up, so a switch to a song
+        // that wasn't prefetched isn't a second or two of silence; play() replaces it once ready.
+        val result = withContext(Dispatchers.IO) {
             runCatching { offlineSource.localStream(song.id) ?: streams.resolveStream(song.id) }
         }
-        // Silence the old track now, not once the new one is ready; libVLC's stop blocks for a
-        // moment, so it runs while the lookup is in flight.
-        player.stop()
-        val result = lookup.await()
         synchronized(playLock) {
             if (request != playRequest) return@coroutineScope
             result
@@ -700,6 +698,7 @@ class AppViewModel(
                     if (!state.isPlaying) _playback.update { it.copy(isBuffering = false) }
                 }
                 .onFailure { e ->
+                    player.stop()
                     _playback.update { it.copy(isPlaying = false, isBuffering = false) }
                     _uiState.update { it.copy(error = e.message) }
                 }

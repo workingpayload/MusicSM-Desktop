@@ -1,5 +1,6 @@
 ﻿package com.example.musicsmd.desktop
 
+import androidx.compose.ui.awt.awtEventOrNull
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -9,9 +10,18 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import com.example.musicsmd.player.AppViewModel
 
+/**
+ * Whether a text field has keyboard input. Compose hands its window an input-method session for
+ * exactly as long as one does, and a field doesn't consume a Space or arrow key-down (the character
+ * arrives separately), so without this check typing "blinding lights" paused the music.
+ */
+val KeyEvent.isTextEntry: Boolean
+    get() = awtEventOrNull?.component?.inputMethodRequests != null
+
 /** Handles desktop-only playback shortcuts at the Window level. */
 fun handleMusicShortcut(event: KeyEvent, viewModel: AppViewModel, onEscape: () -> Unit): Boolean {
     if (event.type != KeyEventType.KeyDown) return false
+    if (event.key != Key.Escape && event.isTextEntry) return false
     val playback = viewModel.playback.value
     return when {
         event.key == Key.Spacebar && !event.isCtrlPressed && !event.isShiftPressed && playback.currentSong != null -> {

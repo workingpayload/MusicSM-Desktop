@@ -75,6 +75,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.example.motionart.MotionArt
+import com.example.musicsmd.motionart.MotionArtwork
+import com.example.musicsmd.motionart.MotionArtStyle
 import com.example.musicsmd.audio.OutputPickerContent
 import com.example.musicsmd.audio.currentOutputId
 import com.example.musicsmd.lyrics.LyricsPanel
@@ -114,6 +117,8 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 @Composable
 fun NowPlayingScreen(
     state: PlaybackUiState,
+    motionArt: MotionArt?,
+    motionArtStyle: MotionArtStyle,
     position: StateFlow<Long>,
     onCollapse: () -> Unit,
     onTogglePlayPause: () -> Unit,
@@ -142,6 +147,8 @@ fun NowPlayingScreen(
     onResetLyricsOffset: () -> Unit,
 ) {
     val song = state.currentSong ?: return
+    var motionRendered by remember(song.id, motionArt?.videoUrl, motionArtStyle) { mutableStateOf(false) }
+    val immersive = motionRendered && motionArtStyle == MotionArtStyle.FULL_SCREEN
     var showSleepTimer by remember { mutableStateOf(false) }
     var showOutputPicker by remember { mutableStateOf(false) }
 
@@ -179,11 +186,19 @@ fun NowPlayingScreen(
                         )
                     }
                 }
+                if (motionArt != null && motionArtStyle == MotionArtStyle.FULL_SCREEN) {
+                    MotionArtwork(
+                        url = motionArt.videoUrl,
+                        playing = state.isPlaying && !state.isBuffering,
+                        onRenderedChange = { motionRendered = it },
+                        modifier = Modifier.matchParentSize(),
+                    )
+                }
                 // Dominant-colour tint + vertical darkening for legibility (colour read in draw phase),
                 // as on mobile's non-immersive layout.
                 Box(
                     Modifier.matchParentSize().drawBehind {
-                        drawRect(accent.value.copy(alpha = 0.35f))
+                        if (!immersive) drawRect(accent.value.copy(alpha = 0.35f))
                         drawRect(
                             Brush.verticalGradient(
                                 0.0f to Color.Black.copy(alpha = 0.20f),
@@ -203,6 +218,8 @@ fun NowPlayingScreen(
                     Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
                         PlayerColumn(
                             state = state,
+                            coverArt = motionArt.takeIf { motionArtStyle == MotionArtStyle.CARD },
+                            immersive = immersive,
                             position = position,
                             accent = readableAccent,
                             showLyrics = showLyrics,
@@ -282,6 +299,8 @@ fun NowPlayingScreen(
 @Composable
 private fun PlayerColumn(
     state: PlaybackUiState,
+    coverArt: MotionArt?,
+    immersive: Boolean,
     position: StateFlow<Long>,
     accent: Color,
     showLyrics: Boolean,
@@ -345,32 +364,41 @@ private fun PlayerColumn(
             modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = 12.dp),
             contentAlignment = Alignment.Center,
         ) {
-            val artSize = minOf(maxWidth, maxHeight, 420.dp)
-            val playing = state.isPlaying
-            val artScale by animateFloatAsState(
-                targetValue = if (playing) 1f else 0.82f,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                label = "artScale",
-            )
-            val breath by rememberInfiniteTransition(label = "artBreathe").animateFloat(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(tween(2800, easing = FastOutSlowInEasing), AnimRepeatMode.Reverse),
-                label = "breath",
-            )
-            val finalScale = artScale * (1f + if (playing) 0.012f * breath else 0f)
-            val artShape = RoundedCornerShape(16.dp)
-            Box(
-                Modifier
-                    .size(artSize)
-                    .graphicsLayer {
-                        scaleX = finalScale
-                        scaleY = finalScale
+            if (!immersive) {
+                val artSize = minOf(maxWidth, maxHeight, 420.dp)
+                val playing = state.isPlaying
+                val artScale by animateFloatAsState(
+                    targetValue = if (playing) 1f else 0.82f,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                    label = "artScale",
+                )
+                val breath by rememberInfiniteTransition(label = "artBreathe").animateFloat(
+                    initialValue = 0f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(tween(2800, easing = FastOutSlowInEasing), AnimRepeatMode.Reverse),
+                    label = "breath",
+                )
+                val finalScale = artScale * (1f + if (playing) 0.012f * breath else 0f)
+                val artShape = RoundedCornerShape(16.dp)
+                Box(
+                    Modifier
+                        .size(artSize)
+                        .graphicsLayer {
+                            scaleX = finalScale
+                            scaleY = finalScale
+                        }
+                        .shadow(elevation = 24.dp, shape = artShape)
+                        .clip(artShape),
+                ) {
+                    ArtworkImage(url = song.artworkUrl, size = artSize, shape = artShape)
+                    coverArt?.let { art ->
+                        MotionArtwork(
+                            url = art.videoUrl,
+                            playing = state.isPlaying && !state.isBuffering,
+                            modifier = Modifier.matchParentSize(),
+                        )
                     }
-                    .shadow(elevation = 24.dp, shape = artShape)
-                    .clip(artShape),
-            ) {
-                ArtworkImage(url = song.artworkUrl, size = artSize, shape = artShape)
+                }
             }
         }
 

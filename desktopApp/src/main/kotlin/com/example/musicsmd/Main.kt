@@ -79,6 +79,8 @@ import com.example.musicsmd.lyrics.LyricsController
 import com.example.musicsmd.lyrics.LyricsUiState
 import com.example.musicsmd.nav.Screen
 import com.example.musicsmd.nav.TopLevelScreens
+import com.example.musicsmd.motionart.MotionArtController
+import com.example.musicsmd.motionart.MotionArtStyle
 import com.example.musicsmd.player.AppUiState
 import com.example.musicsmd.player.AppViewModel
 import com.example.musicsmd.player.LocalSongActions
@@ -196,13 +198,22 @@ private fun AnimatedContentTransitionScope<NavEntry>.navTransition(from: NavEntr
 }
 
 @Composable
-fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
+fun App(
+    viewModel: AppViewModel,
+    lyricsController: LyricsController,
+    motionArtController: MotionArtController,
+    windowActive: Boolean,
+) {
     val uiState by viewModel.uiState.collectAsState()
     val playback by viewModel.playback.collectAsState()
     val lyricsState by lyricsController.state.collectAsState()
     val lyricsVisible by lyricsController.visible.collectAsState()
     val lyricsOffsetMs by lyricsController.offsetMs.collectAsState()
     val settings by AppGraph.settingsStore.settings.collectAsState()
+    val motionArtState by motionArtController.state.collectAsState()
+    LaunchedEffect(playback.isExpanded, windowActive) {
+        motionArtController.setVisible(playback.isExpanded && windowActive)
+    }
     val downloadedSongs by AppGraph.downloadManager.downloads().collectAsState(initial = emptyList())
     val newRelease by AppGraph.updateNotifier.available.collectAsState()
     val coroutineScope = rememberCoroutineScope()
@@ -340,6 +351,11 @@ fun App(viewModel: AppViewModel, lyricsController: LyricsController) {
             val nowPlaying: @Composable (showLyrics: Boolean, lyrics: LyricsUiState) -> Unit = { showLyrics, lyrics ->
                 NowPlayingScreen(
                     state = playback,
+                    motionArt = motionArtState.art.takeIf {
+                        settings.animatedArtwork && playback.isExpanded && windowActive &&
+                            motionArtState.songId == playback.currentSong?.id
+                    },
+                    motionArtStyle = MotionArtStyle.fromKey(settings.animatedArtworkStyle),
                     position = viewModel.position,
                     onCollapse = { viewModel.setExpanded(false) },
                     onTogglePlayPause = viewModel::togglePlayPause,
@@ -769,6 +785,7 @@ fun main() {
         settingsStore = AppGraph.settingsStore,
     )
     val mediaKeys = MediaKeyController(AppGraph.settingsStore, viewModel).also { it.start() }
+    val motionArtController = MotionArtController(viewModel.playback, AppGraph.settingsStore, AppGraph.motionArtRepository)
     AppGraph.updateNotifier.start()
 
     application {
@@ -781,6 +798,8 @@ fun main() {
                 disposed = true
                 mediaKeys.dispose()
                 lyricsController.dispose()
+                motionArtController.dispose()
+                AppGraph.closeMotionArt()
                 viewModel.dispose()
             }
             exitApplication()
@@ -834,7 +853,7 @@ fun main() {
             LaunchedEffect(Unit) {
                 AppIcon.windowImages.takeIf { it.isNotEmpty() }?.let { window.iconImages = it }
             }
-            App(viewModel, lyricsController)
+            App(viewModel, lyricsController, motionArtController, windowVisible && !windowState.isMinimized)
         }
     }
 }

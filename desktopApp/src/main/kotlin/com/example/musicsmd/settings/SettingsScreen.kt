@@ -43,6 +43,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.musicsm.domain.model.LyricsSource
+import com.example.motionart.MotionArtProvider
+import com.example.musicsmd.motionart.MotionArtStyle
 import com.example.musicsmd.ui.components.GlassPanel
 import com.example.musicsmd.ui.components.musicSmSliderColors
 import com.example.musicsmd.ui.theme.Coral
@@ -126,6 +128,49 @@ fun SettingsScreen(
                     valueRange = 0.5f..2.0f,
                     steps = 29,
                     onValueChange = { value -> onUpdate { it.copy(playbackSpeed = value) } },
+                )
+            }
+        }
+
+        item { SectionTitle("Animated artwork") }
+        item {
+            SettingsCard {
+                SettingsSwitch(
+                    "Animated album art",
+                    "Play silent cover loops in Now Playing. Uses internet data, including on metered connections.",
+                    settings.animatedArtwork,
+                ) {
+                    onUpdate { it.copy(animatedArtwork = !it.animatedArtwork) }
+                }
+                Text("Style", style = MaterialTheme.typography.bodyLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MotionArtStyle.entries.forEach { style ->
+                        ArtworkChoice(
+                            label = style.label,
+                            selected = MotionArtStyle.fromKey(settings.animatedArtworkStyle) == style,
+                            enabled = settings.animatedArtwork,
+                        ) { onUpdate { it.copy(animatedArtworkStyle = style.name) } }
+                    }
+                }
+                Text("Source", style = MaterialTheme.typography.bodyLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MotionArtProvider.entries.forEach { provider ->
+                        ArtworkChoice(
+                            label = when (provider) {
+                                MotionArtProvider.AUTO -> "Auto"
+                                MotionArtProvider.APPLE -> "Apple"
+                                MotionArtProvider.TIDAL -> "TIDAL"
+                                MotionArtProvider.VIVI -> "Vivi"
+                            },
+                            selected = MotionArtProvider.fromName(settings.animatedArtworkSource) == provider,
+                            enabled = settings.animatedArtwork,
+                        ) { onUpdate { it.copy(animatedArtworkSource = provider.name) } }
+                    }
+                }
+                Text(
+                    "Not every release has an animated cover. Still artwork stays visible until a video loads.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -305,6 +350,21 @@ private fun SettingsSwitch(title: String, subtitle: String, checked: Boolean, on
         Spacer(Modifier.width(12.dp))
         Switch(checked = checked, onCheckedChange = { onClick() })
     }
+}
+
+@Composable
+private fun ArtworkChoice(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        color = if (selected) OnAccent else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier
+            .padding(vertical = 4.dp)
+            .alpha(if (enabled) 1f else 0.45f)
+            .clip(CircleShape)
+            .background(if (selected) Coral else GlassFillStrong)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    )
 }
 
 @Composable

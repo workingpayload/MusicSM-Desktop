@@ -43,9 +43,9 @@ internal class ManifestProvider(
      * that genuinely contains nothing — an empty list would be cached as a valid answer and the
      * document would not be retried until the next expiry.
      */
-    private suspend fun fetch(): List<ManifestEntry>? = runCatching {
+    private suspend fun fetch(): List<ManifestEntry>? = providerRequest(provider.name) {
         client.get(url).body<Manifest>().items.filter { it.url.isNotBlank() }
-    }.getOrNull()
+    }
 
     internal companion object {
         const val VIVI_URL = "https://vivimusicanvas.mkmdevilmi.workers.dev/canvas.json"
