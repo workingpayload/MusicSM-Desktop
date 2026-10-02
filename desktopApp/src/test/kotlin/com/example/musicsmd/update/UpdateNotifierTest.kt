@@ -66,7 +66,7 @@ class UpdateNotifierTest {
     @Test
     fun `the build knows its own version`() {
         // Local and test builds get the default; releases get -PappVersion from the tag.
-        assertEquals("1.0.0", AppVersion.current)
+        assertEquals("1.1.0", AppVersion.current)
     }
 
     // ---- Reading GitHub -------------------------------------------------------------------------

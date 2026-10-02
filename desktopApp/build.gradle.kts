@@ -55,7 +55,7 @@ dependencies {
 // ---- App version ------------------------------------------------------------------------------
 // One number for the installers and the app itself (Settings > About, the new-version check):
 // -PappVersion, which the release workflow sets from the git tag (v1.2.3 -> 1.2.3).
-val appVersion: String = providers.gradleProperty("appVersion").getOrElse("1.0.0")
+val appVersion: String = providers.gradleProperty("appVersion").getOrElse("1.1.0")
 
 abstract class GenerateAppVersion : DefaultTask() {
     @get:Input
