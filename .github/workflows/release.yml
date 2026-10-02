@@ -2,7 +2,7 @@ name: Release
 
 # Pushing a tag like v1.2.3 builds the Windows MSI and the macOS DMG and publishes both in a GitHub
 # Release for that tag. "Run workflow" on the Actions tab builds them as well, but only as run
-# artifacts (version 1.1.0, no Release).
+# artifacts (version 1.1.1, no Release).
 on:
   push:
     tags: ["v*"]
@@ -64,7 +64,7 @@ jobs:
       - name: Work out the version
         id: version
         run: |
-          if [[ "$GITHUB_REF_TYPE" == tag ]]; then v="${GITHUB_REF_NAME#v}"; v="${v%%-*}"; else v=1.1.0; fi
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then v="${GITHUB_REF_NAME#v}"; v="${v%%-*}"; else v=1.1.1; fi
           echo "Version: $v"
           echo "value=$v" >> "$GITHUB_OUTPUT"
 

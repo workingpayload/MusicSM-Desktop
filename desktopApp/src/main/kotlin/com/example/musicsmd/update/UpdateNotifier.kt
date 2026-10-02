@@ -25,7 +25,7 @@ const val DOWNLOAD_PAGE_URL = "https://music-sm.vercel.app"
 
 /** This build's version. */
 object AppVersion {
-    /** -PappVersion at build time (the release tag without its "v"); "1.1.0" in local builds. */
+    /** -PappVersion at build time (the release tag without its "v"); "1.1.1" in local builds. */
     val current: String by lazy {
         AppVersion::class.java.getResource("/com/example/musicsmd/app-version.txt")
             ?.readText()?.trim()?.takeIf { it.isNotEmpty() }

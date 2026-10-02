@@ -55,7 +55,7 @@ dependencies {
 // ---- App version ------------------------------------------------------------------------------
 // One number for the installers and the app itself (Settings > About, the new-version check):
 // -PappVersion, which the release workflow sets from the git tag (v1.2.3 -> 1.2.3).
-val appVersion: String = providers.gradleProperty("appVersion").getOrElse("1.1.0")
+val appVersion: String = providers.gradleProperty("appVersion").getOrElse("1.1.1")
 
 abstract class GenerateAppVersion : DefaultTask() {
     @get:Input
@@ -198,6 +198,11 @@ compose.desktop {
         providers.gradleProperty("packagingJdk").orNull?.let { javaHome = it }
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Dmg)
+            // The installer's trimmed Java runtime only gets the modules listed here; anything a
+            // library reaches for that's missing fails only in installed builds. jdk.unsupported
+            // (sun.misc.Unsafe) is what vlcj's video buffers need: without it animated artwork never
+            // shows. The rest are what `suggestRuntimeModules` finds in the dependencies.
+            modules("java.instrument", "java.management", "java.net.http", "jdk.dynalink", "jdk.unsupported")
             packageName = "MusicSM Desktop"
             packageVersion = appVersion
             // libVLC, from prepareBundledVlc: lands in the app's resources dir, where
