@@ -31,6 +31,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import java.security.MessageDigest
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -42,12 +43,18 @@ import kotlin.coroutines.cancellation.CancellationException
  * approximate that, so this module talks to the same endpoints the YouTube Music web player uses.
  *
  * It identifies itself as `WEB_REMIX`, which needs no login and no proof-of-origin token for the
- * browse and search endpoints used here. Nothing in this class throws for a malformed page: a
+ * browse and search endpoints used here; an [InnerTubeAuth] signs requests in, for the account's
+ * personal home, history and playlists. Nothing in this class throws for a malformed page: a
  * response whose shape has drifted yields empty results, and only genuine transport failures
  * propagate, so a caller can fall back cleanly.
  */
 class InnerTube(
     private val locale: InnerTubeLocale = InnerTubeLocale(),
+    /**
+     * A signed-in YouTube session to send with every request, making the home feed personal and
+     * the account's history and library readable. Null (or null cookies) means anonymous.
+     */
+    private val auth: InnerTubeAuth? = null,
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -196,6 +203,21 @@ class InnerTube(
     suspend fun relatedSongs(videoId: String): List<YtSong> = related(videoId).songs
 
     /**
+     * The signed-in account's listening history, newest first, as YouTube Music groups it
+     * (Today, Yesterday, This week, months…). Empty when signed out.
+     */
+    suspend fun history(): YtPage = Parsers.page(Parsers.singleColumnList(browse(HISTORY_BROWSE_ID)))
+
+    /**
+     * The signed-in account's playlists, "Liked Music" (id `LM`) included; [playlist] reads any of
+     * them. Podcast "Episodes for later" is left out. Empty when signed out.
+     */
+    suspend fun libraryPlaylists(): List<YtPlaylist> =
+        Parsers.page(Parsers.singleColumnList(browse(LIBRARY_PLAYLISTS_BROWSE_ID))).playlists
+            .filter { it.id != EPISODES_FOR_LATER_ID }
+            .distinctBy { it.id }
+
+    /**
      * A video's title, channel and length. The player endpoint reports these even for a video
      * it won't play without signing in (age-restricted), which is when they're needed.
      */
@@ -224,9 +246,16 @@ class InnerTube(
         )
 
     private suspend inline fun <reified T> request(path: String, body: Any): T {
+        val cookies = auth?.cookies()
         val response: T = client.post {
             url("$API_BASE/$path?prettyPrint=false")
             contentType(ContentType.Application.Json)
+            if (cookies != null) {
+                val sapisid = cookies["SAPISID"] ?: cookies["__Secure-3PAPISID"]
+                header("Cookie", cookies.entries.joinToString("; ") { (name, value) -> "$name=$value" })
+                if (sapisid != null) header("Authorization", sapisidHash(sapisid, ORIGIN, System.currentTimeMillis() / 1000))
+                header("X-Goog-AuthUser", "0")
+            }
             setBody(body)
         }.body()
         // First writer wins: a continuation token is only valid for the session that issued it,
@@ -250,8 +279,22 @@ class InnerTube(
         const val CLIENT_VERSION = "1.20240701.01.00"
 
         const val HOME_BROWSE_ID = "FEmusic_home"
+        const val HISTORY_BROWSE_ID = "FEmusic_history"
+        const val LIBRARY_PLAYLISTS_BROWSE_ID = "FEmusic_liked_playlists"
+        const val EPISODES_FOR_LATER_ID = "SE"
         const val PLAYLIST_BROWSE_PREFIX = "VL"
     }
+}
+
+/** Supplies a signed-in YouTube session's youtube.com cookies, or null while signed out. */
+fun interface InnerTubeAuth {
+    fun cookies(): Map<String, String>?
+}
+
+/** The `Authorization` header a signed-in web client sends: SHA-1 over time, SAPISID and origin. */
+internal fun sapisidHash(sapisid: String, origin: String, epochSeconds: Long): String {
+    val digest = MessageDigest.getInstance("SHA-1").digest("$epochSeconds $sapisid $origin".toByteArray())
+    return "SAPISIDHASH ${epochSeconds}_${digest.joinToString("") { "%02x".format(it) }}"
 }
 
 /**

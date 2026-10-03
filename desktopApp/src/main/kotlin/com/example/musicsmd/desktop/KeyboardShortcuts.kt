@@ -8,6 +8,7 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import com.example.musicsmd.nav.Screen
 import com.example.musicsmd.player.AppViewModel
 
 /**
@@ -56,6 +57,9 @@ fun handleMusicShortcut(event: KeyEvent, viewModel: AppViewModel, onEscape: () -
         }
         event.isCtrlPressed && event.key == Key.R -> {
             viewModel.cycleRepeat(); true
+        }
+        event.key == Key.F5 && viewModel.uiState.value.screen == Screen.Home -> {
+            viewModel.refreshHome(); true
         }
         else -> false
     }

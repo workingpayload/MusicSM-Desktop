@@ -331,6 +331,24 @@ internal data class SectionContent(
     val musicPlaylistShelfRenderer: MusicShelfRenderer? = null,
     val musicResponsiveHeaderRenderer: MusicResponsiveHeaderRenderer? = null,
     val musicDescriptionShelfRenderer: MusicDescriptionShelfRenderer? = null,
+    /** Library pages (the signed-in user's playlists) lay their cards out as a grid. */
+    val gridRenderer: GridRenderer? = null,
+)
+
+@Serializable
+internal data class GridRenderer(
+    val items: List<ShelfItem> = emptyList(),
+    val header: GridHeader? = null,
+)
+
+@Serializable
+internal data class GridHeader(
+    val gridHeaderRenderer: GridHeaderRenderer? = null,
+)
+
+@Serializable
+internal data class GridHeaderRenderer(
+    val title: Runs? = null,
 )
 
 /** The plain-text block the "Lyrics" tab renders: the words, plus a "Source: …" footer. */

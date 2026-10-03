@@ -98,7 +98,7 @@ val vlcInstall: File? = (
         }
     )?.takeIf { it.isDirectory }
 
-/** Audio playback plus software video decoding/conversion for motion covers; GUI and streaming-out stay out. */
+/** Audio playback plus software video decoding/conversion for motion covers; GUI and most streaming-out stay out. */
 val vlcPluginFolders = listOf(
     "access", "audio_filter", "audio_mixer", "audio_output", "codec", "demux", "keystore", "logger",
     "meta_engine", "misc", "packetizer", "stream_extractor", "stream_filter", "video_chroma", "video_filter",
@@ -177,6 +177,13 @@ val prepareBundledVlc = tasks.register<PrepareBundledVlc>("prepareBundledVlc") {
                         "plugins/video_output/libdrawable_plugin.dll",
                     )
                     include("plugins/spu/libmarq_plugin.dll", "plugins/spu/liblogo_plugin.dll")
+                    // Mix decodes track snippets to a WAV file, faster than real time.
+                    include(
+                        "plugins/stream_out/libstream_out_transcode_plugin.dll",
+                        "plugins/stream_out/libstream_out_standard_plugin.dll",
+                        "plugins/mux/libmux_wav_plugin.dll",
+                        "plugins/access_output/libaccess_output_file_plugin.dll",
+                    )
                     vlcPluginsLeftOut.forEach { exclude("plugins/**/${it}_plugin.dll") }
                     // The Blu-ray menus' Java helpers, left behind by the Blu-ray plugin above.
                     exclude("plugins/**/*.jar")

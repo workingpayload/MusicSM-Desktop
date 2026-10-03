@@ -12,7 +12,9 @@ For privacy questions or requests, contact **rs91963@gmail.com**.
 
 MusicSM Desktop does not require an account. We do not operate a MusicSM account
 service or a server that receives your library, search history, or listening
-statistics. The application does not include advertising trackers or a
+statistics. Signing in to YouTube is optional and only needed when YouTube
+refuses to play music anonymously on your network (see section 3). The
+application does not include advertising trackers or a
 publisher-operated analytics or crash-reporting service. We do not sell your
 personal information or use it for targeted advertising.
 
@@ -30,9 +32,11 @@ The application stores information locally to provide its features:
 | Liked songs, playlists, and recently played songs | Maintain your music library |
 | Search queries you submit or act on, and recently opened search results | Provide search history and recent-search shortcuts |
 | Played songs, play timestamps, and listening duration | Show listening statistics and personalize the home feed locally |
+| Songs you skipped early and when (kept 60 days) | Leave songs and artists you keep skipping out of home recommendations |
 | Playback queue and related playback state | Restore your queue between sessions |
 | Downloaded audio, download records, and file paths | Support offline playback and download management |
 | Local music file paths, tags, duration, and extracted artwork | Index and play music stored on your device |
+| YouTube session cookies, only if you sign in to YouTube | Play music through your account when YouTube blocks anonymous playback |
 
 On Windows, the primary data folder is
 `%USERPROFILE%\.musicsm-desktop`. Downloads are stored there by default, or in
@@ -53,6 +57,32 @@ Depending on the features you use, the application contacts:
   playback, and artwork. Requests may include search text, content identifiers,
   client information, language/region settings, and service-issued session
   identifiers.
+- **Optional YouTube sign-in:** YouTube sometimes refuses anonymous playback
+  from a network ("Sign in to confirm you're not a bot"). If you choose
+  Settings → YouTube account → Sign in, the application opens Microsoft Edge,
+  Google Chrome, Brave, or Chromium with a separate, temporary profile at
+  Google's sign-in page. You enter your password on Google's page; the
+  application never sees it. Once YouTube Music loads, the application closes
+  that window, copies the browser's youtube.com cookies, and deletes the
+  temporary profile. The cookies are stored in `youtube_session.bin` in the
+  data folder (encrypted for your Windows user account with Windows Data
+  Protection; on other systems, readable only by your user account) and are
+  sent only to YouTube, only for playback requests. While signed in, YouTube
+  can associate the songs you play through it with your Google account.
+  To resolve those streams, the application also runs a hidden copy of the
+  same browser, with an empty profile and no account data, which loads
+  YouTube's player script from `www.youtube.com` and requests anti-abuse
+  tokens from Google (`jnn-pa.googleapis.com`). Sign out in Settings to delete
+  the stored cookies; to end the session itself, sign out of that device in
+  your Google account settings.
+- **YouTube Music account data (while signed in):** unless you turn off
+  Settings → YouTube account → "Use my YouTube Music library", the signed-in
+  session is also sent with requests for your personal YouTube Music home
+  feed, your YouTube watch history, and your YouTube playlists (including
+  Liked Music), which are shown in Home and Library. These are read only:
+  MusicSM Desktop does not report what you play back to YouTube, so plays in
+  the app are not added to your YouTube history. The responses are kept in
+  memory and not saved to disk.
 - **Spotify and Apple Music public playlist services:** when you import a
   playlist link. The relevant service receives the playlist identifier or URL
   information needed to retrieve its public contents. Imported tracks may then
@@ -114,7 +144,7 @@ not use your microphone or camera for these features.
 ## 5. Your choices, retention, and deletion
 
 Local information remains on your device until you remove it or replace it.
-You can clear search history and listening statistics using the application's
+You can clear search history and listening statistics (including skips) using the application's
 controls, remove liked songs or playlists, delete downloads, change indexed
 music folders, configure or disable individual lyrics sources, and disable
 animated artwork or choose its provider.
@@ -142,7 +172,8 @@ not provided to us or delete information held independently by other services.
 
 The application generally uses HTTPS for its configured online service
 requests. Primary local settings and library records are stored as ordinary
-files and are not encrypted by MusicSM Desktop. Their protection depends on
+files and are not encrypted by MusicSM Desktop; the optional YouTube session
+cookies are the exception (see section 3). Their protection depends on
 your operating system, user-account permissions, and device security.
 No storage or transmission method can be guaranteed completely secure.
 

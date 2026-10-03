@@ -17,9 +17,16 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
 - **Navigation**: the mobile app's landscape `SideDock` — one Liquid Glass pane on the left with a
   sliding selection puck (Search / Listen / Library / Downloads / Local / Stats / Settings), with
   back-stack; window sized to the usable screen.
-- **Home**: personalized feed like mobile (recently played, quick picks, daily rotation, forgotten
-  favorites, ranked with `ShelfRanker`/`TasteProfile`) plus YouTube Music shelves (song rows and
-  album/artist/playlist cards); more shelves load as you scroll. A **List / Cards** switch in the
+- **Home**: personalized feed like mobile's: recently played, listen again, daily discover,
+  recommended for you, "More like …", your artists, from artists you follow, forgotten favorites,
+  daily mix and albums from your artists (ranked with `ShelfRanker`/`TasteProfile`), then
+  YouTube Music's shelves (song rows and album/artist/playlist cards). More shelves load as you
+  scroll, then a "More from …" shelf per remaining followed artist. **Refresh** in the header (or
+  F5) rebuilds the feed with the current shelves left on screen until the new ones arrive. Each
+  refresh rotates the seeds, artists and slices used, so the picks change. Otherwise the feed only
+  changes once a day. Songs you skip in the first 30 s are kept in `skips.json` for 60 days (a
+  later full listen clears them). A song skipped once isn't offered as a new pick. Neither is one
+  skipped twice anywhere, nor music by an artist you keep skipping and rarely play. A **List / Cards** switch in the
   header (also Settings → Appearance → "Cards on Home") shows songs as mobile's horizontal card
   shelves instead of rows; right-click a card for the song menu.
 - **Search**: dedicated screen with All / Songs / Videos / Albums / Artists filters, top result,
@@ -50,7 +57,24 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
   launch. As on mobile, the next track's stream URL is looked up ahead of time, so skipping starts
   almost at once. Switching to a song that wasn't looked up ahead keeps the current one playing
   (the play button shows a spinner) until the new stream is ready, so there's no silent gap; a
-  restored queue resumes directly at its saved position.
+  restored queue resumes directly at its saved position. libVLC reopens its audio stream for
+  every track, which a Bluetooth speaker hears as a one-second dropout just after the song starts,
+  so while music plays (and for 5 minutes after it stops) the app holds the output open with a
+  silent stream of its own (`AudioKeepAlive`), on the same device libVLC uses.
+- **Crossfade & Mix**: mobile's transitions (Settings → Playback). **Crossfade** (0–12 s)
+  overlaps the end of a track with the start of the next using an equal-power fade. **Mix** makes
+  DJ-style blends (8 s, or the crossfade length if longer): a minute before the end, the end of
+  the current track and the start of the next are decoded and analysed as on mobile — silent
+  run-outs and lead-ins are skipped, beats are found, and when the tempos already agree the blend
+  is placed so downbeats land together — and the bass swaps from one track to the other part-way
+  through. libVLC has no hook into its audio stream like ExoPlayer's, so the player has two decks:
+  the next track waits paused and silent on the second one, starts at the hand-off and becomes
+  the current track while the old one fades out. Fades and the bass cut run on each deck's own
+  equalizer (libVLC's volume is shared by every player in the app on Windows), so the equalizer
+  stays attached, flat if yours is off, while either is on. Snippets are decoded by libVLC's
+  stream output to a temporary WAV file, faster than real time. Repeat-one, the sleep timer's
+  "end of track", and autoplay radio's next fetch don't blend; skipping, seeking or pausing during
+  a blend ends it at once. Set `MUSICSM_MIX_DEBUG=1` to log each plan.
 - **Motion**: mobile's transitions — Now Playing slides up from the mini player on a spring (the
   pill fades under it), pushed pages slide in from the right and back out the other way, dock tabs
   cross-fade, and the queue panel slides in. Going back keeps a page's scroll position and filters.
@@ -80,9 +104,34 @@ Feature parity with the mobile app, minus Android-only pieces (see bottom of lis
 - **Equalizer**: libVLC presets, preamp and 10 bands, persisted.
 - **Stats**: play-event log (`stats.json`) with totals, top songs/artists, activity and
   listening-clock charts per range.
-- **Settings**: playback, search, lyrics source order/toggles, audio, folders, desktop, data.
+- **Settings**: playback, YouTube account, search, lyrics source order/toggles, audio, folders, desktop, data.
+- **YouTube sign-in** (Settings → YouTube account, optional): YouTube sometimes refuses every
+  anonymous client from a network ("Sign in to confirm you're not a bot"), and songs then load and
+  stop. NewPipe has no way past that, so playback falls back to a signed-in session: Sign in opens
+  Edge/Chrome/Brave/Chromium with a temporary profile at Google's sign-in page (a plain window —
+  Google rejects browsers it can tell are remotely debuggable). When YouTube Music loads, the app
+  closes it (on Windows; elsewhere the user closes it), reopens the profile headless just to copy
+  the youtube.com cookies, and deletes it. Cookies sit in `youtube_session.bin`, DPAPI-encrypted on
+  Windows. A signed-in `WEB_REMIX` player request then gets formats; a hidden headless browser
+  tab (`BrowserPlayerScript`) runs yt-dlp's ejs solver to unscramble the signature/`n` and
+  bgutils-js BotGuard to mint the video-bound PO token googlevideo wants beyond the first MB
+  (`desktopApp/src/main/resources/youtube`). Once a bot check is seen, songs go straight to the
+  signed-in path for 30 min. A playback failure for this reason shows a "Sign in to keep playing"
+  dialog, and the song resumes after signing in. With no supported browser installed, Sign in (and
+  blocked playback while signed in) shows "A browser is needed" with per-OS install advice instead.
+  `MUSICSM_BROWSER=<path>` points the app at a specific Chromium-family browser (portable installs);
+  when set, nothing else is searched.
+- **YouTube Music account data** (Settings → YouTube account → "Use my YouTube Music library", on
+  once signed in): a second `InnerTube` sends the session (cookies + SAPISIDHASH) to read the
+  account's personal home (`FEmusic_home`), history (`FEmusic_history`) and playlists
+  (`FEmusic_liked_playlists`, incl. Liked Music `LM`). Home puts the account's shelves and a
+  "Recently played on YouTube" shelf first, its continuation pages next, local recommendation
+  shelves below (skipping songs and shelf titles the account's already show); YouTube history also
+  seeds the local recommendations. Library lists the account's playlists under "From YouTube
+  Music", opened through the signed-in session (up to 500 tracks). Read only: plays aren't
+  reported to YouTube.
 - **Desktop extras**: keyboard shortcuts (Space play/pause, Ctrl+←/→ prev/next, Shift+←/→ seek,
-  Ctrl+↑/↓ volume, Ctrl+L like, Ctrl+S shuffle, Ctrl+R repeat, Esc back; all but Esc are ignored
+  Ctrl+↑/↓ volume, Ctrl+L like, Ctrl+S shuffle, Ctrl+R repeat, F5 refresh Home, Esc back; all but Esc are ignored
   while typing in a text field, so a space in a search doesn't pause the music), global media keys
   (JNativeHook), system tray with optional minimize-to-tray.
 - **Update notice**: like mobile's update prompt, minus the self-install. An installed build checks
@@ -165,7 +214,8 @@ The installer lands in `desktopApp\build\compose\binaries\main\msi\` and adds a 
 (`C:\Program Files\VideoLAN\VLC`, or `/Applications/VLC.app` on macOS) into the app's resources, and
 `BundledVlcDirectoryProvider` points vlcj at that copy at run time. On Windows only the audio-player
 and motion-cover decoding/conversion parts are taken (~51 MB of VLC's ~180 MB), including the
-memory video-output plugin; on macOS the whole library and plugin set goes, as that
+memory video-output plugin and the few stream-output plugins Mix uses to decode snippets to WAV;
+on macOS the whole library and plugin set goes, as that
 side hasn't been trimmed or tested on a Mac yet. Options:
 
 - `-PvlcDir=<dir>` — bundle a VLC from somewhere else (on macOS, `VLC.app/Contents/MacOS`).
@@ -187,6 +237,13 @@ These tests exercise the bundled codecs, loop playback, frame conversion, pause/
 silent playback, and native resource release without contacting a music service. Add
 `MUSICSM_TEST_REMOTE_ART=true` to also check a real catalog lookup and decode its returned
 video; that additional test needs internet access and depends on provider availability.
+
+### Mix tests
+
+`.\gradlew.bat :desktopApp:test --tests "com.example.musicsmd.playback.mix.*"` covers beat
+detection, transition planning, fade curves, deck equalizer levels and WAV reading. With
+`MUSICSM_TEST_VLC_RESOURCES` set as above, `MixNativeTest` also checks that libVLC decodes a
+snippet quickly and at the right time and that the standby deck takes over (muted).
 
 ## Releases
 
@@ -225,4 +282,7 @@ GPLv3 — a public repo covers that.
 - Stream URLs expire (~6h) and are IP-bound — cached in memory for ~5h (`MusicRepository`), and
   re-resolved once if libVLC reports a playback error.
 - `YouTubeMusicSource` dispatches by id shape (`MPREb_…` album / `UC…` channel → InnerTube; URLs /
-  bare names → NewPipe). Metadata falls back to NewPipe silently; stream resolution has no fallback.
+  bare names → NewPipe). Metadata falls back to NewPipe silently; stream resolution falls back
+  only to the signed-in session (`signin/SignedInStreamResolver`) when YouTube bot-checks the network.
+  Live test of that path: set `MUSICSM_YT_COOKIES` to a cookie JSON file and run
+  `.\gradlew.bat :desktopApp:test --tests "*YouTubeAccountTest"`.

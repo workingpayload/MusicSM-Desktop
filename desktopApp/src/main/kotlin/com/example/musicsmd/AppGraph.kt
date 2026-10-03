@@ -22,6 +22,10 @@ import com.example.musicsm.data.repository.YouTubeMusicLyricsProvider
 import com.example.musicsm.data.source.youtube.NewPipeDownloaderImpl
 import com.example.musicsm.data.source.youtube.NewPipeMusicSource
 import com.example.musicsm.data.source.youtube.YouTubeMusicSource
+import com.example.musicsm.data.source.youtube.signin.SignedInStreamResolver
+import com.example.musicsm.data.source.youtube.signin.YouTubeAccountLibrary
+import com.example.musicsmd.youtube.BrowserPlayerScript
+import com.example.musicsmd.youtube.YouTubeAccount
 import com.example.musicsm.data.spotify.SpotifyPublicClient
 import com.example.musicsm.domain.repository.LibraryRepository
 import com.example.musicsm.domain.repository.LyricsRepository
@@ -39,6 +43,7 @@ import com.example.musicsmd.playback.PlayerController
 import com.example.musicsmd.search.SearchHistoryStore
 import com.example.musicsmd.settings.SettingsStore
 import com.example.musicsmd.stats.FileStatsRepository
+import com.example.musicsmd.stats.SkipTracker
 import com.example.musicsmd.update.UpdateChecker
 import com.example.musicsmd.update.UpdateNotifier
 import com.example.musicsm.domain.repository.StatsRepository
@@ -58,8 +63,38 @@ object AppGraph {
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    val musicSource: MusicSource by lazy {
-        YouTubeMusicSource(innerTube = innerTube, newPipe = NewPipeMusicSource())
+    val musicSource: MusicSource get() = youTubeMusicSource
+
+    /** The same source, for the signed-in account's home, history and playlists. */
+    val youTubeLibrary: YouTubeAccountLibrary get() = youTubeMusicSource
+
+    private val youTubeMusicSource: YouTubeMusicSource by lazy {
+        YouTubeMusicSource(
+            innerTube = innerTube,
+            newPipe = NewPipeMusicSource(),
+            signedInStreams = signedInStreams,
+            accountInnerTube = InnerTube(auth = { youTubeAccount.cookies() }),
+            accountEnabled = ::youTubeAccountDataEnabled,
+        )
+    }
+
+    /** Signed in, and the user lets the app use the account's home, history and playlists. */
+    fun youTubeAccountDataEnabled(): Boolean =
+        settingsStore.settings.value.useYouTubeAccountData && youTubeAccount.cookies() != null
+
+    /** The YouTube sign-in used when YouTube won't play anonymously on this network. */
+    val youTubeAccount: YouTubeAccount by lazy { YouTubeAccount(client = okHttpClient) }
+
+    private val youTubePlayerScript = lazy { BrowserPlayerScript(okHttpClient) }
+
+    private val signedInStreams: SignedInStreamResolver by lazy {
+        SignedInStreamResolver(client = okHttpClient, session = youTubeAccount, script = youTubePlayerScript.value)
+    }
+
+    /** Closes the hidden browser and any sign-in window. */
+    fun closeYouTube() {
+        if (youTubePlayerScript.isInitialized()) youTubePlayerScript.value.close()
+        youTubeAccount.cancelSignIn()
     }
 
     val libraryRepository: LibraryRepository by lazy { FileLibraryRepository(scope = appScope) }
@@ -67,7 +102,15 @@ object AppGraph {
     val settingsStore: SettingsStore by lazy { SettingsStore() }
 
     private val fileStatsRepository: FileStatsRepository by lazy { FileStatsRepository(scope = appScope) }
-    val statsRepository: StatsRepository by lazy { fileStatsRepository }
+    /** Clearing listening history also forgets skips, which are listening history too. */
+    val statsRepository: StatsRepository by lazy {
+        object : StatsRepository by fileStatsRepository {
+            override suspend fun clear() {
+                fileStatsRepository.clear()
+                skipTracker.clear()
+            }
+        }
+    }
     val searchHistoryStore: SearchHistoryStore by lazy { SearchHistoryStore() }
 
     val musicRepository: MusicRepository by lazy { MusicRepositoryImpl(musicSource) }
@@ -116,7 +159,10 @@ object AppGraph {
     val offlineSource: OfflineSource by lazy { CompositeOfflineSource(listOf(downloadManager, localMusicManager)) }
 
     /** Observers of track changes (e.g. the listening-stats log). */
-    val playbackListeners: List<PlaybackListener> by lazy { listOf(fileStatsRepository) }
+    val playbackListeners: List<PlaybackListener> by lazy { listOf(fileStatsRepository, skipTracker) }
+
+    /** Songs moved on from early: a negative signal for Home's recommendations. */
+    val skipTracker: SkipTracker by lazy { SkipTracker(scope = appScope) }
 
     val playerController: PlayerController by lazy { PlayerController() }
 

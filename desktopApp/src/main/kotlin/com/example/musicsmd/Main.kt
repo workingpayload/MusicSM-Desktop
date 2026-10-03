@@ -83,6 +83,7 @@ import com.example.musicsmd.motionart.MotionArtController
 import com.example.musicsmd.motionart.MotionArtStyle
 import com.example.musicsmd.player.AppUiState
 import com.example.musicsmd.player.AppViewModel
+import com.example.musicsmd.playback.AudioKeepAlive
 import com.example.musicsmd.player.LocalSongActions
 import com.example.musicsmd.player.NowPlayingScreen
 import com.example.musicsmd.player.PlayerBar
@@ -114,10 +115,17 @@ import com.example.musicsmd.ui.theme.DarkPalette
 import com.example.musicsmd.ui.theme.MusicSMTheme
 import com.example.musicsmd.ui.theme.asThemeAccent
 import com.example.musicsmd.update.UpdateDialog
+import com.example.musicsmd.youtube.BrowserHelp
+import com.example.musicsmd.youtube.YouTubeAccountState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import com.example.musicsmd.desktop.WindowChrome
 import com.example.musicsmd.ui.components.LocalDockInset
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -216,6 +224,17 @@ fun App(
     }
     val downloadedSongs by AppGraph.downloadManager.downloads().collectAsState(initial = emptyList())
     val newRelease by AppGraph.updateNotifier.available.collectAsState()
+    val youTubeAccount by AppGraph.youTubeAccount.state.collectAsState()
+    LaunchedEffect(youTubeAccount) {
+        if (youTubeAccount == YouTubeAccountState.SignedIn) viewModel.onYouTubeSignedIn()
+    }
+    val youTubeDataEnabled = youTubeAccount == YouTubeAccountState.SignedIn && settings.useYouTubeAccountData
+    var youTubeDataSeen by remember { mutableStateOf(false) }
+    LaunchedEffect(youTubeDataEnabled) {
+        // At launch Home is built with the account already; only later changes rebuild it.
+        viewModel.onYouTubeAccountChanged(refreshHome = youTubeDataSeen)
+        youTubeDataSeen = true
+    }
     val coroutineScope = rememberCoroutineScope()
     // Per-screen saved state (scroll positions), so going back lands where you left, as on mobile.
     val saveableStates = rememberSaveableStateHolder()
@@ -478,6 +497,7 @@ fun App(
                                             onPlaylistClick = { viewModel.navigateTo(Screen.PlaylistDetail(it.id)) },
                                             onLoadMoreHome = viewModel::loadMoreHome,
                                             onRetryHome = { viewModel.loadHome() },
+                                            onRefreshHome = viewModel::refreshHome,
                                         )
                                         Screen.Search -> SearchScreen(
                                             state = navState,
@@ -497,6 +517,7 @@ fun App(
                                         Screen.Library -> LibraryScreen(
                                             likedSongs = navState.likedSongs,
                                             playlists = navState.playlists,
+                                            youTubePlaylists = navState.youTubePlaylists,
                                             isLiked = ::isLiked,
                                             onSongClick = ::playSong,
                                             onToggleLike = viewModel::toggleLike,
@@ -576,6 +597,16 @@ fun App(
                                             onOpenEqualizer = { viewModel.navigateTo(Screen.Equalizer) },
                                             onClearListeningHistory = { AppGraph.statsRepository.clear() },
                                             onClearSearchHistory = AppGraph.searchHistoryStore::clear,
+                                            youTubeAccount = youTubeAccount,
+                                            useYouTubeAccountData = settings.useYouTubeAccountData,
+                                            onToggleYouTubeAccountData = {
+                                                AppGraph.settingsStore.update { it.copy(useYouTubeAccountData = !it.useYouTubeAccountData) }
+                                            },
+                                            onYouTubeSignIn = {
+                                                if (BrowserHelp.isAvailable()) AppGraph.youTubeAccount.startSignIn() else viewModel.showBrowserNeeded()
+                                            },
+                                            onYouTubeCancelSignIn = AppGraph.youTubeAccount::cancelSignIn,
+                                            onYouTubeSignOut = AppGraph.youTubeAccount::signOut,
                                         )
                                         Screen.Equalizer -> EqualizerScreen(
                                             settingsStore = AppGraph.settingsStore,
@@ -725,6 +756,46 @@ fun App(
                     )
                 }
 
+                if (uiState.youTubeSignInNeeded && youTubeAccount != YouTubeAccountState.SigningIn) {
+                    AlertDialog(
+                        onDismissRequest = viewModel::dismissYouTubeSignInPrompt,
+                        title = { Text("Sign in to keep playing") },
+                        text = {
+                            Text(
+                                "YouTube is asking this network to confirm it's not a bot, so it won't play songs " +
+                                    "anonymously right now. Sign in to YouTube and MusicSM plays them through your " +
+                                    "account. A browser window opens for the sign-in.",
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                if (BrowserHelp.isAvailable()) {
+                                    AppGraph.youTubeAccount.startSignIn()
+                                    viewModel.navigateTo(Screen.Settings)
+                                } else {
+                                    viewModel.showBrowserNeeded()
+                                }
+                            }) { Text("Sign in") }
+                        },
+                        dismissButton = { TextButton(onClick = viewModel::dismissYouTubeSignInPrompt) { Text("Not now") } },
+                    )
+                }
+
+                if (uiState.browserNeeded) {
+                    AlertDialog(
+                        onDismissRequest = viewModel::dismissBrowserNeeded,
+                        title = { Text("A browser is needed") },
+                        text = { Text(BrowserHelp.message()) },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                runCatching { java.awt.Desktop.getDesktop().browse(java.net.URI(BrowserHelp.DOWNLOAD_URL)) }
+                                viewModel.dismissBrowserNeeded()
+                            }) { Text("Get Chrome") }
+                        },
+                        dismissButton = { TextButton(onClick = viewModel::dismissBrowserNeeded) { Text("OK") } },
+                    )
+                }
+
                 // Full-screen player — composed over everything, so the screen behind keeps its
                 // state (scroll position, search results) while the player is open. Slides up from
                 // the mini player and back down, as mobile's sheet does; the offset is read in the
@@ -778,6 +849,9 @@ fun main() {
         settingsStore = AppGraph.settingsStore,
         offlineSource = AppGraph.offlineSource,
         playbackListeners = AppGraph.playbackListeners,
+        audioKeepAlive = AudioKeepAlive(CoroutineScope(SupervisorJob() + Dispatchers.Default)),
+        skipSignals = AppGraph.skipTracker::signals,
+        youTubeLibrary = AppGraph.youTubeLibrary,
     )
     val lyricsController = LyricsController(
         playback = viewModel.playback,
@@ -800,6 +874,7 @@ fun main() {
                 lyricsController.dispose()
                 motionArtController.dispose()
                 AppGraph.closeMotionArt()
+                AppGraph.closeYouTube()
                 viewModel.dispose()
             }
             exitApplication()

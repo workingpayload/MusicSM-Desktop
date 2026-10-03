@@ -25,6 +25,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -74,6 +79,7 @@ fun HomeScreen(
     onPlaylistClick: (Playlist) -> Unit,
     onLoadMoreHome: () -> Unit,
     onRetryHome: () -> Unit,
+    onRefreshHome: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize().padding(20.dp)) {
@@ -82,6 +88,12 @@ fun HomeScreen(
                 Text(greeting(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 Text("Made from your recent plays, likes and MusicSM picks", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            RefreshButton(
+                refreshing = state.isRefreshingHome,
+                enabled = !state.isLoadingHome,
+                onClick = onRefreshHome,
+            )
+            Spacer(Modifier.width(10.dp))
             LayoutToggle(layout = layout, onChange = onLayoutChange)
         }
         Spacer(Modifier.height(14.dp))
@@ -91,6 +103,7 @@ fun HomeScreen(
             state.homeFeed.sections.isEmpty() -> EmptyHome(onRetry = onRetryHome)
             else -> HomeShelves(
                 sections = state.homeFeed.sections,
+                generation = state.homeGeneration,
                 layout = layout,
                 canLoadMore = state.homeFeed.continuation != null,
                 isLoadingMore = state.isLoadingMoreHome,
@@ -113,6 +126,7 @@ fun HomeScreen(
 @Composable
 private fun HomeShelves(
     sections: List<HomeSection>,
+    generation: Int,
     layout: HomeLayout,
     canLoadMore: Boolean,
     isLoadingMore: Boolean,
@@ -134,6 +148,14 @@ private fun HomeShelves(
     }
     LaunchedEffect(nearEnd, canLoadMore, sections.size) {
         if (nearEnd && canLoadMore) onLoadMore()
+    }
+    // A refreshed feed starts from the top, not wherever the old one was scrolled to.
+    var seenGeneration by remember { mutableIntStateOf(generation) }
+    LaunchedEffect(generation) {
+        if (generation != seenGeneration) {
+            seenGeneration = generation
+            listState.scrollToItem(0)
+        }
     }
 
     LazyColumn(
@@ -222,6 +244,43 @@ private fun CardShelf(
 }
 
 /** List / Cards switch, styled like Search's filter chips. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun RefreshButton(refreshing: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    TooltipArea(tooltip = { Tooltip("Refresh (F5)") }) {
+        Row(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(GlassFill)
+                .clickable(enabled = enabled && !refreshing, onClickLabel = "Refresh Home", onClick = onClick)
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (refreshing) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Coral)
+            } else {
+                Icon(Icons.Filled.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = if (refreshing) "Refreshing" else "Refresh",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun Tooltip(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
+        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(GlassFillStrong).padding(horizontal = 10.dp, vertical = 6.dp),
+    )
+}
+
 @Composable
 private fun LayoutToggle(layout: HomeLayout, onChange: (HomeLayout) -> Unit) {
     Row(

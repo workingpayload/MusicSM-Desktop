@@ -56,6 +56,9 @@ import java.awt.Desktop
 import javax.swing.JFileChooser
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import com.example.musicsmd.playback.MixController
+import com.example.musicsmd.youtube.BrowserWindows
+import com.example.musicsmd.youtube.YouTubeAccountState
 
 @Composable
 fun SettingsScreen(
@@ -64,6 +67,12 @@ fun SettingsScreen(
     onOpenEqualizer: () -> Unit,
     onClearListeningHistory: suspend () -> Unit,
     onClearSearchHistory: () -> Unit,
+    youTubeAccount: YouTubeAccountState,
+    useYouTubeAccountData: Boolean,
+    onToggleYouTubeAccountData: () -> Unit,
+    onYouTubeSignIn: () -> Unit,
+    onYouTubeCancelSignIn: () -> Unit,
+    onYouTubeSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -129,6 +138,42 @@ fun SettingsScreen(
                     steps = 29,
                     onValueChange = { value -> onUpdate { it.copy(playbackSpeed = value) } },
                 )
+                val crossfadeSeconds = settings.crossfadeMs / 1000f
+                SliderRow(
+                    title = "Crossfade",
+                    subtitle = if (settings.crossfadeMs == 0) {
+                        "Off — tracks follow each other directly"
+                    } else {
+                        "Fade out and in over ${String.format("%.1f", crossfadeSeconds).removeSuffix(".0")} seconds"
+                    },
+                    value = crossfadeSeconds,
+                    valueRange = 0f..(MixController.MAX_CROSSFADE_MS / 1000f),
+                    steps = MixController.MAX_CROSSFADE_MS / 500 - 1,
+                    onValueChange = { value -> onUpdate { it.copy(crossfadeMs = (value * 1000).roundToInt()) } },
+                )
+                SettingsSwitch("Mix", "Beat-matched DJ transitions — tempo-synced blends with a bass swap.", settings.mixMode) {
+                    onUpdate { it.copy(mixMode = it.mixMode.not()) }
+                }
+            }
+        }
+
+        item { SectionTitle("YouTube account") }
+        item {
+            SettingsCard {
+                YouTubeAccountRow(
+                    state = youTubeAccount,
+                    onSignIn = onYouTubeSignIn,
+                    onCancel = onYouTubeCancelSignIn,
+                    onSignOut = onYouTubeSignOut,
+                )
+                if (youTubeAccount == YouTubeAccountState.SignedIn) {
+                    SettingsSwitch(
+                        "Use my YouTube Music library",
+                        "Your YouTube home, history and playlists in Home and Library. Plays here aren't added to your YouTube history.",
+                        useYouTubeAccountData,
+                        onToggleYouTubeAccountData,
+                    )
+                }
             }
         }
 
@@ -315,6 +360,53 @@ fun SettingsScreen(
                 TextButton(onClick = { onClearSearchHistory(); confirmClearSearch = false }) { Text("Clear") }
             },
             dismissButton = { TextButton(onClick = { confirmClearSearch = false }) { Text("Cancel") } },
+        )
+    }
+}
+
+@Composable
+private fun YouTubeAccountRow(
+    state: YouTubeAccountState,
+    onSignIn: () -> Unit,
+    onCancel: () -> Unit,
+    onSignOut: () -> Unit,
+) {
+    val (title, subtitle) = when (state) {
+        YouTubeAccountState.SignedIn -> "Signed in" to
+            "If YouTube blocks anonymous playback on your network, songs play through your account."
+        YouTubeAccountState.SigningIn -> "Finish signing in in the browser window" to
+            if (BrowserWindows.supported) {
+                "MusicSM opened Edge or Chrome with a separate, temporary profile. It closes by itself once YouTube Music opens."
+            } else {
+                "MusicSM opened your browser with a separate, temporary profile. Close it once YouTube Music opens."
+            }
+        is YouTubeAccountState.Failed -> "Not signed in" to state.message
+        YouTubeAccountState.SignedOut -> "Not signed in" to
+            "Only needed if YouTube says \"confirm you're not a bot\" and songs stop playing. An alt account is safest."
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (state is YouTubeAccountState.Failed) Coral else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        val (label, action) = when (state) {
+            YouTubeAccountState.SignedIn -> "Sign out" to onSignOut
+            YouTubeAccountState.SigningIn -> "Cancel" to onCancel
+            else -> "Sign in" to onSignIn
+        }
+        val primary = state !is YouTubeAccountState.SignedIn && state !is YouTubeAccountState.SigningIn
+        Text(
+            label,
+            color = if (primary) OnAccent else Coral,
+            modifier = Modifier.clip(CircleShape)
+                .background(if (primary) Coral else GlassFillStrong)
+                .clickable(onClick = action)
+                .padding(horizontal = 14.dp, vertical = 8.dp),
         )
     }
 }

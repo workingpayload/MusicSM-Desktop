@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,6 +63,9 @@ fun AppleSeekBar(
 ) {
     var dragging by remember { mutableStateOf(false) }
     var dragFraction by remember { mutableFloatStateOf(0f) }
+    // The gesture handlers outlive recompositions; they must call the latest onSeek, whose target
+    // depends on the current song's duration, not the one captured when they were set up.
+    val currentOnSeek by rememberUpdatedState(onSeek)
     val shown = (if (dragging) dragFraction else progress).coerceIn(0f, 1f)
 
     val trackHeight by animateDpAsState(if (dragging) 9.dp else 5.dp, label = "seekHeight")
@@ -82,6 +87,28 @@ fun AppleSeekBar(
             contentAlignment = Alignment.Center,
         ) {
             val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
+            // The whole 24 dp row takes clicks and drags, not just the thin capsule drawn in it.
+            val input = Modifier
+                .fillMaxSize()
+                .pointerInput(widthPx) {
+                    detectTapGestures { offset -> currentOnSeek((offset.x / widthPx).coerceIn(0f, 1f)) }
+                }
+                .pointerInput(widthPx) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { offset ->
+                            dragging = true
+                            dragFraction = (offset.x / widthPx).coerceIn(0f, 1f)
+                        },
+                        onHorizontalDrag = { change, _ ->
+                            dragFraction = (change.position.x / widthPx).coerceIn(0f, 1f)
+                        },
+                        onDragEnd = {
+                            dragging = false
+                            currentOnSeek(dragFraction)
+                        },
+                        onDragCancel = { dragging = false },
+                    )
+                }
             val fillBrush = if (playing) {
                 val shift = phase * widthPx
                 Brush.linearGradient(
@@ -98,26 +125,7 @@ fun AppleSeekBar(
                     .fillMaxWidth()
                     .height(trackHeight)
                     .clip(RoundedCornerShape(50))
-                    .background(trackColor)
-                    .pointerInput(widthPx) {
-                        detectTapGestures { offset -> onSeek((offset.x / widthPx).coerceIn(0f, 1f)) }
-                    }
-                    .pointerInput(widthPx) {
-                        detectHorizontalDragGestures(
-                            onDragStart = { offset ->
-                                dragging = true
-                                dragFraction = (offset.x / widthPx).coerceIn(0f, 1f)
-                            },
-                            onHorizontalDrag = { change, _ ->
-                                dragFraction = (change.position.x / widthPx).coerceIn(0f, 1f)
-                            },
-                            onDragEnd = {
-                                dragging = false
-                                onSeek(dragFraction)
-                            },
-                            onDragCancel = { dragging = false },
-                        )
-                    },
+                    .background(trackColor),
             ) {
                 Box(
                     modifier = Modifier
@@ -127,6 +135,7 @@ fun AppleSeekBar(
                         .background(fillBrush),
                 )
             }
+            Box(input)
         }
 
         if (showLabels) {

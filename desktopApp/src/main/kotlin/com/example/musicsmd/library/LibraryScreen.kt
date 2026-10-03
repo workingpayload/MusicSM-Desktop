@@ -47,11 +47,12 @@ import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
 
-/** "Your Library": liked songs + local playlists, mirrors the mobile app's Library screen. */
+/** "Your Library": liked songs + local playlists (and the signed-in YouTube account's), mirrors the mobile app's Library screen. */
 @Composable
 fun LibraryScreen(
     likedSongs: List<Song>,
     playlists: List<Playlist>,
+    youTubePlaylists: List<Playlist>,
     isLiked: (String) -> Boolean,
     onSongClick: (Song, List<Song>) -> Unit,
     onToggleLike: (Song) -> Unit,
@@ -150,7 +151,35 @@ fun LibraryScreen(
                 }
             }
 
-            if (likedSongs.isEmpty() && playlists.isEmpty()) {
+            if (youTubePlaylists.isNotEmpty()) {
+                item {
+                    Text(
+                        "From YouTube Music",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
+                    )
+                }
+                items(youTubePlaylists, key = { "yt:" + it.id }) { playlist ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable { onPlaylistClick(playlist) }.padding(vertical = 8.dp),
+                    ) {
+                        if (playlist.artworkUrl != null) {
+                            ArtworkImage(url = playlist.artworkUrl, size = 40.dp)
+                        } else {
+                            Icon(Icons.Filled.PlaylistPlay, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(40.dp))
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(playlist.name, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
+                            Text("YouTube Music", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+
+            if (likedSongs.isEmpty() && playlists.isEmpty() && youTubePlaylists.isEmpty()) {
                 item {
                     Text(
                         "Songs you like and playlists you create will show up here.",

@@ -86,6 +86,8 @@ internal object Parsers {
         }
         val list = section.musicShelfRenderer ?: section.musicPlaylistShelfRenderer
         if (list != null) return buildShelf(list.title?.text, list.contents)
+        val grid = section.gridRenderer
+        if (grid != null) return buildShelf(grid.header?.gridHeaderRenderer?.title?.text, grid.items)
         return null
     }
 

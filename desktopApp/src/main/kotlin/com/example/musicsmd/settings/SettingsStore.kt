@@ -34,6 +34,10 @@ data class DesktopSettings(
     val playbackSpeed: Float = 1f,
     val restoreQueue: Boolean = true,
     val sleepTimerFadeOut: Boolean = true,
+    // Overlap tracks by this long (0 = off), as on mobile.
+    val crossfadeMs: Int = 0,
+    // DJ-style transitions: beat-matched where possible, skipping silent run-outs and lead-ins.
+    val mixMode: Boolean = false,
 
     // Search
     val searchVideos: Boolean = false,
@@ -69,6 +73,9 @@ data class DesktopSettings(
     // Desktop
     val minimizeToTray: Boolean = true,
     val mediaKeys: Boolean = true,
+
+    // YouTube account — when signed in, use its personal home, history and playlists.
+    val useYouTubeAccountData: Boolean = true,
 
     // Updates — a version the user said "Later" to, which isn't announced again.
     val dismissedUpdateVersion: String? = null,

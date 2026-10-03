@@ -1,8 +1,12 @@
 package com.example.musicsmd.player
 
+import com.example.musicsm.data.source.youtube.signin.YouTubeAccountLibrary
+import com.example.musicsm.data.source.youtube.signin.YouTubeSignInRequiredException
+import com.example.musicsmd.youtube.BrowserUnavailableException
 import com.example.musicsm.domain.model.Album
 import com.example.musicsm.domain.model.Artist
 import com.example.musicsm.domain.model.HomeFeed
+import com.example.musicsm.domain.model.HomeItem
 import com.example.musicsm.domain.model.Playlist
 import com.example.musicsm.domain.model.SearchResults
 import com.example.musicsm.domain.model.Song
@@ -12,15 +16,20 @@ import com.example.musicsm.domain.repository.StatsRepository
 import com.example.musicsm.domain.source.MusicSource
 import com.example.musicsmd.home.DesktopHomeFeedBuilder
 import com.example.musicsmd.nav.Screen
+import com.example.musicsmd.playback.AudioKeepAlive
 import com.example.musicsmd.playback.AudioOutputDeviceInfo
+import com.example.musicsmd.playback.MixController
 import com.example.musicsmd.playback.OfflineSource
 import com.example.musicsmd.playback.PlaybackListener
 import com.example.musicsmd.playback.PlayerController
 import com.example.musicsmd.playback.QueuePersistence
 import com.example.musicsmd.playback.SleepTimerManager
 import com.example.musicsmd.playback.SleepTimerState
+import com.example.musicsmd.playback.mix.VlcSnippetDecoder
+import com.example.musicsm.domain.model.PlayableStream
 import com.example.musicsmd.settings.RepeatMode
 import com.example.musicsmd.settings.SettingsStore
+import com.example.musicsmd.stats.SkipSignals
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -40,6 +49,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 /** Ephemeral playback UI state, mirrors the shape of the mobile app's `PlayerState`. */
 data class PlaybackUiState(
@@ -73,6 +83,10 @@ data class AppUiState(
     val homeFeed: HomeFeed = HomeFeed(),
     val isLoadingHome: Boolean = true,
     val isLoadingMoreHome: Boolean = false,
+    /** A manual refresh is rebuilding Home; the current shelves stay up until it's done. */
+    val isRefreshingHome: Boolean = false,
+    /** Bumped whenever Home gets a whole new feed, so it can scroll back to the top. */
+    val homeGeneration: Int = 0,
     val likedSongs: List<Song> = emptyList(),
     val playlists: List<Playlist> = emptyList(),
     val albumDetail: Album? = null,
@@ -80,6 +94,12 @@ data class AppUiState(
     val playlistDetail: Playlist? = null,
     val isLoadingDetail: Boolean = false,
     val error: String? = null,
+    /** Playback stopped because YouTube wants a sign-in on this network. */
+    val youTubeSignInNeeded: Boolean = false,
+    /** YouTube sign-in or signed-in playback needs a Chromium-family browser, and none is installed. */
+    val browserNeeded: Boolean = false,
+    /** The signed-in YouTube account's playlists ("Liked Music" first), for Library. */
+    val youTubePlaylists: List<Playlist> = emptyList(),
 )
 
 /**
@@ -98,9 +118,18 @@ class AppViewModel(
     private val offlineSource: OfflineSource = OfflineSource { null },
     private val playbackListeners: List<PlaybackListener> = emptyList(),
     private val queuePersistence: QueuePersistence = QueuePersistence(),
+    /** Silence that keeps a Bluetooth output awake across track changes; null in tests. */
+    private val audioKeepAlive: AudioKeepAlive? = null,
+    /** Recent skips, which Home's recommendations steer away from. */
+    skipSignals: () -> SkipSignals = { SkipSignals() },
+    /** The signed-in YouTube account's home, history and playlists; null in tests. */
+    private val youTubeLibrary: YouTubeAccountLibrary? = null,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val homeFeedBuilder = DesktopHomeFeedBuilder(musicSource, library, statsRepository)
+    private val homeFeedBuilder = DesktopHomeFeedBuilder(streams, library, statsRepository, youTubeLibrary, skipSignals)
+
+    /** Bumped by each manual refresh, so Home rotates to different seeds and picks. */
+    private var homeRefreshCount = 0
 
     private val _uiState = MutableStateFlow(AppUiState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
@@ -121,9 +150,31 @@ class AppViewModel(
         pausePlayback = { pause() },
     )
 
+    /** Crossfade / Mix: blends into the next track on the player's second deck. */
+    private val mix = MixController(
+        player = player,
+        decoder = VlcSnippetDecoder(player.factory),
+        host = object : MixController.Host {
+            override val currentSongId: String? get() = loadedSongId
+            override fun upcoming(): MixController.Upcoming? = upcomingForMix()
+            override suspend fun resolve(song: Song): PlayableStream? = withContext(Dispatchers.IO) {
+                runCatching { offlineSource.localStream(song.id) ?: streams.resolveStream(song.id) }.getOrNull()
+            }
+            override fun onHandoff(next: MixController.Upcoming, startMs: Long) = onMixHandoff(next, startMs)
+        },
+        parentScope = scope,
+    )
+
     // Time actually played of the current song; seeks don't count, so stats reflect listening.
     private var listenedMs = 0L
     private var lastPositionMs = 0L
+
+    // The position of the latest seek, until libVLC reports it (see isStaleAfterSeek).
+    @Volatile
+    private var seekTargetMs: Long? = null
+
+    @Volatile
+    private var seekAtNanos = 0L
     private var originalQueue: List<Song> = emptyList()
 
     /** The song libVLC is actually playing; null while switching, so the old track's events are ignored. */
@@ -163,7 +214,7 @@ class AppViewModel(
             )
         }
         player.onPositionChanged = { positionMs, durationMs ->
-            if (loadedSongId != null) {
+            if (loadedSongId != null && !isStaleAfterSeek(positionMs)) {
                 val delta = positionMs - lastPositionMs
                 if (delta in 1..MAX_TICK_MS) listenedMs += delta
                 lastPositionMs = positionMs
@@ -173,7 +224,7 @@ class AppViewModel(
                 }
             }
         }
-        player.onEndReached = { if (loadedSongId != null) onTrackEnded() }
+        player.onEndReached = { loadedSongId?.let(::onTrackEnded) }
         player.onAudioStarted = { if (loadedSongId != null) _playback.update { it.copy(isBuffering = false) } }
         player.onError = { onPlaybackError() }
         restoreQueueIfNeeded()
@@ -183,6 +234,19 @@ class AppViewModel(
         observeSleepTimer()
         observeQueuePersistence()
         observeUpcomingForPrefetch()
+        observeAudioKeepAlive()
+    }
+
+    /** Holds the output open whenever a song is playing or loading, on the device libVLC uses. */
+    private fun observeAudioKeepAlive() {
+        val keepAlive = audioKeepAlive ?: return
+        scope.launch {
+            _playback.map { state ->
+                val active = state.currentSong != null && (state.isPlaying || state.isBuffering)
+                val device = state.audioOutputDevice?.let { id -> state.audioOutputDevices.firstOrNull { it.id == id }?.name }
+                active to device
+            }.distinctUntilChanged().collect { (active, device) -> keepAlive.update(active, device) }
+        }
     }
 
     private fun observeLibrary() {
@@ -203,6 +267,9 @@ class AppViewModel(
     private fun observeSettings() {
         scope.launch {
             settingsStore.settings.collect { settings ->
+                player.keepEqualizerAttached = settings.crossfadeMs > 0 || settings.mixMode
+                mix.crossfadeMs = settings.crossfadeMs
+                mix.mixMode = settings.mixMode
                 player.setVolume(settings.volume)
                 player.setPlaybackSpeed(settings.playbackSpeed)
                 settings.audioOutputDevice?.let(player::setOutputDevice)
@@ -316,23 +383,68 @@ class AppViewModel(
 
     fun loadHome() = scope.launch {
         _uiState.update { it.copy(isLoadingHome = true, error = null) }
-        runCatching { homeFeedBuilder.initialFeed() }
-            .onSuccess { feed -> _uiState.update { it.copy(homeFeed = feed, isLoadingHome = false) } }
+        runCatching { homeFeedBuilder.initialFeed(homeRefreshCount) }
+            .onSuccess { feed -> _uiState.update { it.copy(homeFeed = feed, isLoadingHome = false, homeGeneration = it.homeGeneration + 1) } }
             .onFailure { e -> _uiState.update { it.copy(isLoadingHome = false, error = e.message) } }
+    }
+
+    /**
+     * The YouTube account became usable or stopped being so (sign-in, sign-out, the Settings
+     * switch): reload its playlists and rebuild Home with or without its shelves.
+     */
+    fun onYouTubeAccountChanged(refreshHome: Boolean = true) {
+        val account = youTubeLibrary ?: return
+        scope.launch {
+            val playlists = if (account.isAvailable) runCatching { account.accountPlaylists() }.getOrDefault(emptyList()) else emptyList()
+            _uiState.update { it.copy(youTubePlaylists = playlists) }
+        }
+        if (refreshHome && _uiState.value.homeFeed.sections.isNotEmpty()) refreshHome()
+    }
+
+    /** Rebuilds Home with fresh picks, keeping the current shelves on screen until the new ones are ready. */
+    fun refreshHome() {
+        val state = _uiState.value
+        if (state.isLoadingHome || state.isRefreshingHome) return
+        if (state.homeFeed.sections.isEmpty()) {
+            loadHome()
+            return
+        }
+        _uiState.update { it.copy(isRefreshingHome = true, error = null) }
+        scope.launch {
+            val refresh = ++homeRefreshCount
+            runCatching { homeFeedBuilder.initialFeed(refresh) }
+                .onSuccess { feed ->
+                    _uiState.update {
+                        it.copy(
+                            homeFeed = feed,
+                            isRefreshingHome = false,
+                            isLoadingMoreHome = false,
+                            homeGeneration = it.homeGeneration + 1,
+                        )
+                    }
+                }
+                .onFailure { e -> _uiState.update { it.copy(isRefreshingHome = false, error = "Couldn't refresh Home: ${e.message}") } }
+        }
     }
 
     /** Appends the next page of home shelves; YouTube Music's first page is often only 2 shelves. */
     fun loadMoreHome() {
         val state = _uiState.value
         val continuation = state.homeFeed.continuation ?: return
-        if (state.isLoadingHome || state.isLoadingMoreHome) return
+        if (state.isLoadingHome || state.isLoadingMoreHome || state.isRefreshingHome) return
+        val generation = state.homeGeneration
+        val shownSongIds = state.homeFeed.sections
+            .flatMap { section -> section.items.mapNotNull { (it as? HomeItem.SongItem)?.song?.id } }
+            .toSet()
         _uiState.update { it.copy(isLoadingMoreHome = true) }
         scope.launch {
-            val more = runCatching { musicSource.moreHomeShelves(continuation) }.getOrNull()
+            val more = runCatching { homeFeedBuilder.moreShelves(continuation, shownSongIds) }.getOrNull()
             _uiState.update { current ->
+                // A refresh replaced the feed meanwhile: these shelves belong to the old one.
+                if (current.homeGeneration != generation) return@update current
                 if (more == null) return@update current.copy(isLoadingMoreHome = false)
                 val known = current.homeFeed.sections.map { it.title }.toSet()
-                val added = more.sections.filter { it.title !in known }
+                val added = more.sections.filter { it.items.isNotEmpty() && it.title !in known }
                 current.copy(
                     homeFeed = HomeFeed(
                         sections = current.homeFeed.sections + added,
@@ -485,6 +597,7 @@ class AppViewModel(
     }
 
     fun pause() {
+        mix.finishBlend()
         player.pause()
         _playback.update { it.copy(isPlaying = false) }
     }
@@ -493,9 +606,26 @@ class AppViewModel(
         val clamped = positionMs.coerceAtLeast(0L)
         lastPositionMs = clamped
         if (loadedSongId == _playback.value.currentSong?.id) {
+            mix.finishBlend()
+            seekTargetMs = clamped
+            seekAtNanos = System.nanoTime()
             player.seekTo(clamped)
         }
         _position.value = clamped
+    }
+
+    /**
+     * libVLC seeks asynchronously, and the position it reports for a moment afterwards can still be
+     * the old one, which snapped the seek bar back as if the click hadn't taken. Those are skipped.
+     */
+    private fun isStaleAfterSeek(positionMs: Long): Boolean {
+        val target = seekTargetMs ?: return false
+        val sinceSeekMs = (System.nanoTime() - seekAtNanos) / 1_000_000
+        if (sinceSeekMs > SEEK_SETTLE_MS || abs(positionMs - target) <= SEEK_TOLERANCE_MS) {
+            seekTargetMs = null
+            return false
+        }
+        return true
     }
 
     fun setVolume(percent: Int) {
@@ -668,12 +798,52 @@ class AppViewModel(
     }
 
     /** Swaps libVLC over to [song], superseding any switch still waiting on its stream. */
-    private fun loadSong(song: Song) = synchronized(playLock) {
-        loadedSongId = null
-        _playback.update { it.copy(isBuffering = true) }
-        val request = ++playRequest
-        loadJob?.cancel()
-        loadJob = scope.launch { resolveAndPlay(song, request) }
+    private fun loadSong(song: Song) {
+        // Outside playLock: the mix controller takes its own lock first, then playLock on a hand-off.
+        mix.cancel()
+        synchronized(playLock) {
+            loadedSongId = null
+            _playback.update { it.copy(isBuffering = true) }
+            val request = ++playRequest
+            loadJob?.cancel()
+            loadJob = scope.launch { resolveAndPlay(song, request) }
+        }
+    }
+
+    /** Where playback moves on by itself, for a blend; null when it stops, repeats one or is about to fetch radio. */
+    private fun upcomingForMix(): MixController.Upcoming? {
+        val state = _playback.value
+        if (state.repeatMode == RepeatMode.ONE || sleepTimerManager.shouldStopAtEndOfTrack()) return null
+        val index = nextIndexOf(state) ?: return null
+        return MixController.Upcoming(state.queue[index], index)
+    }
+
+    /** A blend started: [next] is now playing (from [startMs]) on the player's other deck. */
+    private fun onMixHandoff(next: MixController.Upcoming, startMs: Long) {
+        synchronized(playLock) {
+            ++playRequest
+            loadJob?.cancel()
+        }
+        finishCurrentSong()
+        loadedSongId = next.song.id
+        lastPositionMs = startMs
+        _position.value = startMs
+        _playback.update { s ->
+            val index = next.index.takeIf { s.queue.getOrNull(it)?.id == next.song.id }
+                ?: s.queue.indexOfFirst { it.id == next.song.id }.takeIf { it >= 0 }
+                ?: s.queueIndex
+            s.copy(
+                currentSong = next.song,
+                queueIndex = index,
+                isPlaying = true,
+                isBuffering = false,
+                durationMs = next.song.durationMs,
+            )
+        }
+        hasActiveSongForStats = true
+        retriedSongId = null
+        playbackListeners.forEach { runCatching { it.onSongStarted(next.song) } }
+        scope.launch { library.recordPlay(next.song) }
     }
 
     private suspend fun resolveAndPlay(song: Song, request: Long) = coroutineScope {
@@ -700,8 +870,31 @@ class AppViewModel(
                 .onFailure { e ->
                     player.stop()
                     _playback.update { it.copy(isPlaying = false, isBuffering = false) }
-                    _uiState.update { it.copy(error = e.message) }
+                    _uiState.update {
+                        it.copy(
+                            error = e.message,
+                            youTubeSignInNeeded = e is YouTubeSignInRequiredException,
+                            browserNeeded = it.browserNeeded || e is BrowserUnavailableException,
+                        )
+                    }
                 }
+        }
+    }
+
+    fun showBrowserNeeded() = _uiState.update { it.copy(browserNeeded = true, youTubeSignInNeeded = false) }
+
+    fun dismissBrowserNeeded() = _uiState.update { it.copy(browserNeeded = false) }
+
+    fun dismissYouTubeSignInPrompt() = _uiState.update { it.copy(youTubeSignInNeeded = false) }
+
+    /** After a sign-in, plays the song that stopped for want of one. */
+    fun onYouTubeSignedIn() {
+        val wasBlocked = _uiState.value.youTubeSignInNeeded
+        _uiState.update { it.copy(youTubeSignInNeeded = false, error = null) }
+        val song = _playback.value.currentSong ?: return
+        if (wasBlocked && !_playback.value.isPlaying) {
+            _playback.update { it.copy(isPlaying = true) }
+            loadSong(song)
         }
     }
 
@@ -733,10 +926,12 @@ class AppViewModel(
         playbackListeners.forEach { runCatching { it.onSongFinished(current, listened, state.durationMs) } }
     }
 
-    private fun onTrackEnded() {
+    private fun onTrackEnded(endedSongId: String) {
         scope.launch {
             val state = _playback.value
             val current = state.currentSong ?: return@launch
+            // A blend may already have moved on: only the track that ended advances the queue.
+            if (current.id != endedSongId || loadedSongId != endedSongId) return@launch
             loadedSongId = null
             if (sleepTimerManager.shouldStopAtEndOfTrack()) {
                 sleepTimerManager.finishEndOfTrack()
@@ -831,6 +1026,8 @@ class AppViewModel(
         }
         sleepTimerManager.cancel()
         finishCurrentSong()
+        audioKeepAlive?.close()
+        mix.release()
         player.release()
     }
 
@@ -838,6 +1035,12 @@ class AppViewModel(
         /** Position ticks larger than this are seeks, not playback. */
         const val MAX_TICK_MS = 3_000L
         const val RESTART_PREVIOUS_MS = 3_000L
+
+        /** After a seek, position reports this far from the target are the pre-seek ones... */
+        const val SEEK_TOLERANCE_MS = 1_500L
+
+        /** ...for at most this long. */
+        const val SEEK_SETTLE_MS = 1_500L
         const val LOCAL_ID_PREFIX = "local:"
 
         /** Lets rapid skips and queue edits settle before looking up the next track. */
